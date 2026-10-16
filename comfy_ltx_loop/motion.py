@@ -10,6 +10,9 @@ def plan_fingerprint(plan):
             'strength_reference': plan.get('review', {}).get('strength_reference')}
     if 'background' in plan:
         data['background'] = plan['background']
+    for key in ('use_character_points', 'use_background_points'):
+        if key in plan:
+            data[key] = plan[key]
     if 'prepared_prompt' in plan.get('analysis', {}):
         data['analysis'] = plan['analysis']
     return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(',', ':'),
@@ -93,6 +96,9 @@ def validate_plan(plan):
         raise ValueError('Recorded image transform changed; prepare and review again')
     if not 0 <= plan['strength'] <= .1 or not isinstance(plan['landmarks'], list):
         raise ValueError('Invalid motion strength or landmark list')
+    if any(not isinstance(plan[key], bool) for key in ('use_character_points', 'use_background_points')
+           if key in plan):
+        raise ValueError('Invalid point group selection')
     background = plan.get('background')
     if background is not None and (not isinstance(background, dict) or
             not isinstance(background.get('enabled'), bool) or
@@ -129,9 +135,18 @@ def validate_plan(plan):
     return plan
 
 
+def active_point(plan, point):
+    if not point['enabled']:
+        return False
+    if point.get('group', 'character') == 'background':
+        return (plan.get('use_background_points', True) and
+                plan.get('background', {}).get('enabled', False))
+    return plan.get('use_character_points', True)
+
+
 def review_plan(plan):
     plan = copy.deepcopy(validate_plan(plan))
-    if not any(p['enabled'] for p in plan['landmarks']):
+    if not any(active_point(plan, p) for p in plan['landmarks']):
         raise ValueError('Add or enable at least one landmark before review')
     check_preparation(plan)
     plan['review'] = {'state': 'reviewed', 'strength_reference': plan['strength']}
@@ -141,13 +156,14 @@ def review_plan(plan):
 
 def check_preparation(plan):
     analysis = plan.get('analysis', {})
-    if 'prepared_prompt' in analysis and (analysis['prepared_prompt'] != plan['prompt'] or
+    if any(active_point(plan, p) and p.get('group', 'character') == 'character' for p in plan['landmarks']) and (
+            'prepared_prompt' in analysis) and (analysis['prepared_prompt'] != plan['prompt'] or
             analysis.get('prepared_requested') != plan['requested'] or
             analysis.get('prepared_preparation') != analysis.get('preparation') or
             analysis.get('prepared_model_path') != analysis.get('model_path')):
         raise ValueError('Prepare character points for changed prompt or preparation settings')
     background = plan.get('background', {})
-    if background.get('enabled'):
+    if any(active_point(plan, p) and p.get('group') == 'background' for p in plan['landmarks']):
         if not background.get('prompt', '').strip():
             raise ValueError('Enter background motion before review')
         if (background.get('prepared_prompt') != background['prompt'] or
@@ -170,19 +186,24 @@ def require_review(plan, identity, size, prompt, duration, fps, strength, short_
     validate_plan(plan)
     if plan['source_id'] != identity or plan['source_size'] != list(size):
         raise ValueError('Source image changed; prepare points again')
-    if plan['prompt'] != prompt or (requested is not None and plan['requested'] != requested):
+    character_active = any(active_point(plan, p) and p.get('group', 'character') == 'character'
+                           for p in plan['landmarks'])
+    effective = {**plan, 'background':background} if background is not None else plan
+    background_active = any(active_point(effective, p) and p.get('group') == 'background'
+                            for p in plan['landmarks'])
+    if character_active and (plan['prompt'] != prompt or (requested is not None and plan['requested'] != requested)):
         raise ValueError('Character prompt changed; prepare points again')
-    if analysis is not None and 'prepared_prompt' in plan.get('analysis', {}) and (
+    if character_active and analysis is not None and 'prepared_prompt' in plan.get('analysis', {}) and (
             plan['analysis'].get('preparation') != analysis.get('preparation') or
             plan['analysis'].get('model_path') != analysis.get('model_path')):
         raise ValueError('Character preparation settings changed; prepare points again')
-    if background is not None and plan.get('background', {}).get('enabled', False) != background.get('enabled', False):
+    if background_active and background is not None and plan.get('background', {}).get('enabled', False) != background.get('enabled', False):
         raise ValueError('Background settings changed; review points again')
-    if background is not None and background.get('enabled') and (
+    if background_active and background is not None and background.get('enabled') and (
             plan.get('background', {}).get('prompt') != background.get('prompt') or
             plan.get('background', {}).get('preparation') != background.get('preparation')):
         raise ValueError('Background settings changed; prepare background points again')
-    if background is not None and background.get('enabled') and background.get('preparation') == 'model' and (
+    if background_active and background is not None and background.get('enabled') and background.get('preparation') == 'model' and (
             plan.get('background', {}).get('prepared_model_path') is not None and
             plan['background']['prepared_model_path'] != (analysis or {}).get('model_path')):
         raise ValueError('Background model changed; prepare background points again')
@@ -257,8 +278,7 @@ def canvas_tracks(plan):
     ox, oy, width, height = plan['transform']['content']
     tracks = []
     for point in plan['landmarks']:
-        if not point['enabled'] or (point.get('group') == 'background' and
-                                    not plan.get('background', {}).get('enabled', False)):
+        if not active_point(plan, point):
             continue
         path, segment, track = point['path'], 0, []
         for index in range(plan['frames']):

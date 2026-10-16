@@ -87,7 +87,7 @@
       "title": "Inputs",
       "properties": {},
       "widgets_values": [
-        "## Comfy LTX Loop\nLoad one image. Set character motion prompt and requested parts. Prepare character points, edit paths, then review.\n\nBackground motion is always available on the editor. Text enables background animation; blank text keeps saved background points but excludes their tracks. Choose Model or Manual, then prepare Background points or prepare both groups together. Use Visible points to inspect Character, Background, or All while New point group controls only newly placed points. Circles mark character points and squares mark background points.\n\nUse Run to choose Prepare character points, Prepare background points, Prepare character + background points, Render, or Upscale. Each choice queues one stage. Accept point review before Render.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results."
+        "## Comfy LTX Loop\nLoad one image and set character motion text. Render directly when no points are active; Prepare and accept point review only when using points.\n\nBackground motion text guides scenery even without points. Blank text excludes background tracks while keeping saved points. Use the Use character points and Use background points switches to include or exclude each saved group. Choose Model or Manual to prepare points. Visible points filters the editor; New point group controls newly placed points. Circles mark character points and squares mark background points.\n\nRun offers Prepare character points, Prepare background points, Prepare both, Render and Upscale. Each choice queues one stage. Switching a point group requires renewed review before rendering with its points.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -993,7 +993,9 @@
         false,
         "",
         "model",
-        "character"
+        "character",
+        true,
+        true
       ]
     },
     {

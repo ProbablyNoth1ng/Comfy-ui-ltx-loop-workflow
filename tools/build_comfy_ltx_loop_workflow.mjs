@@ -18,7 +18,7 @@ const editor=node(10000,'ComfyLTXLoopMotionEditor',[450,0],
     ['IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING'].map((type,i)=>({
         name:['canvas','tracks','motion_plan','fps','duration','seed','prompt'][i],type,links:[]})),
     ['Gentle hair sway. Stationary camera.','auto',6,24,.01,720,
-     42,'models/Qwen3.5-9B','local Qwen3.5','{}','render',false,'','model','character'],[540,1050]);
+     42,'models/Qwen3.5-9B','local Qwen3.5','{}','render',false,'','model','character',true,true],[540,1050]);
 const saver=node(4852,'ComfyLTXLoopSaveCandidate',[2200,0],
     [{name:'video',type:'VIDEO',link:null},{name:'motion_plan',type:'MOTION_PLAN',link:null},
      {name:'seed',type:'INT',widget:{name:'seed'},link:null}],
@@ -79,7 +79,7 @@ for(const n of graph.nodes) {
     if(n.type==='MarkdownNote') {n.pos=[(noteIndex++%4)*600,1200+Math.floor(noteIndex/4)*400];}
 }
 graph.nodes.find(n=>n.id===5527).widgets_values=[
-    '## Comfy LTX Loop\nLoad one image. Set character motion prompt and requested parts. Prepare character points, edit paths, then review.\n\nBackground motion is always available on the editor. Text enables background animation; blank text keeps saved background points but excludes their tracks. Choose Model or Manual, then prepare Background points or prepare both groups together. Use Visible points to inspect Character, Background, or All while New point group controls only newly placed points. Circles mark character points and squares mark background points.\n\nUse Run to choose Prepare character points, Prepare background points, Prepare character + background points, Render, or Upscale. Each choice queues one stage. Accept point review before Render.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results.'];
+    '## Comfy LTX Loop\nLoad one image and set character motion text. Render directly when no points are active; Prepare and accept point review only when using points.\n\nBackground motion text guides scenery even without points. Blank text excludes background tracks while keeping saved points. Use the Use character points and Use background points switches to include or exclude each saved group. Choose Model or Manual to prepare points. Visible points filters the editor; New point group controls newly placed points. Circles mark character points and squares mark background points.\n\nRun offers Prepare character points, Prepare background points, Prepare both, Render and Upscale. Each choice queues one stage. Switching a point group requires renewed review before rendering with its points.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results.'];
 graph.groups=[];
 graph.last_node_id=10002;graph.last_link_id=next-1;
 graph.extra={comfy_ltx_loop:{schema:1,official_sha256:crypto.createHash('sha256').update(fs.readFileSync(official)).digest('hex'),

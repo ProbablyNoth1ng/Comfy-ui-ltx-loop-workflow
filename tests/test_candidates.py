@@ -16,6 +16,21 @@ from comfy_ltx_loop.motion import new_plan, review_plan
 
 
 class CandidateTests(unittest.TestCase):
+    def test_no_point_render_plan_is_saved_with_review_not_required(self):
+        with tempfile.TemporaryDirectory() as tmp, patch('comfy_ltx_loop.candidates.encode_previews'):
+            plan = new_plan('abc',(64,64),'Hair sway',['auto'],[],1,8,.01,256)
+            plan['review'] = {'state':'not_required'}
+            frames = np.zeros((9,256,256,3),dtype=np.uint8)
+            record = save_candidate(frames,plan,42,Path(tmp),{'recipe':'motion-track'})
+            saved = json.loads(Path(record['record']).read_text())
+            self.assertEqual(saved['motion_plan']['review']['state'],'not_required')
+            self.assertEqual(saved['frame_count'],8)
+            active = new_plan('abc',(64,64),'Hair sway',['auto'],
+                              [{'label':'tip','x':.5,'y':.5}],1,8,.01,256)
+            active['review'] = {'state':'not_required'}
+            with self.assertRaisesRegex(ValueError,'Reviewed plan required'):
+                save_candidate(frames,active,43,Path(tmp),{'recipe':'motion-track'})
+
     def test_fast_finish_uses_saved_frames_and_records_method(self):
         if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
             self.skipTest('ffmpeg/ffprobe unavailable')

@@ -1,6 +1,6 @@
 # Comfy LTX Loop product specification
 
-Updated: 2026-10-09.
+Updated: 2026-10-16.
 
 This is the living product agreement for the owner. Technical designs and task
 plans are indexed in [Superpowers documents](superpowers/README.md).
@@ -24,7 +24,7 @@ does not guarantee them. Real anime and GPU qualification is still pending.
 | P-02 | Enter character motion and optionally requested parts. Prepare suggestions with local Qwen3.5, local Qwen3-VL or manual editing. Automatic failures show actionable feedback and leave manual correction available. Useful visible suggestions survive partial responses; hidden anatomy is omitted. | Implemented; real model accuracy pending |
 | P-03 | Enter background motion to enable scenery animation. Choose Model or Manual; prepare Character, Background or both. Each preparation changes its own group. Clearing background motion excludes background tracks and retains saved points. Failed automatic preparation preserves existing points. | Implemented; deployed scenery render pending |
 | P-04 | Review/edit points on the source image. Filter Character, Background or All; hidden points cannot be selected. Choose the group for new points. Add, move, delete or disable points, edit labels/objects/roles/reasons/strengths and inspect trajectories. Moving points are green, stationary anchors blue, disabled points gray; character points are circles and background points squares. | Implemented; installed frontend qualification pending |
-| P-05 | Accept point review before Render. Changed image clears groups; changed instructions or preparation settings require preparing the affected group again. Point edits invalidate review. Timing/canvas changes keep normalized paths and require renewed review in the editor. Enabled background animation needs an enabled moving background point. | Implemented; installed frontend qualification pending |
+| P-05 | Accept point review before Render when points are active. Changed image clears groups; changed instructions or preparation settings require preparing an affected active group again. Point edits and group switches invalidate review. Timing/canvas changes keep normalized paths and require renewed review when points are active. Active background points need an enabled moving background point. | Implemented in source; installed frontend qualification pending |
 | P-06 | Run offers an explicit choice of Prepare character, Prepare background, Prepare both, Render or Upscale. One choice queues one isolated stage. Prepare cannot generate; Render cannot upscale; Upscale reads only a saved candidate. Cancel queues nothing. | Implemented; deployed conversion/queue qualification pending |
 | P-07 | Render with the official LTX-2.5 single-stage Motion Track pipeline. Show continuous and forward seam previews, allow another seed/candidate, and retain original lossless frames. Returning trajectories guide closure; the owner checks the seam. | Implemented; GPU and visual acceptance pending |
 | P-08 | Select original saved candidates after reopening; automatically select the newest completed render and refresh the list when requested. Preserve reviewed points in the saved workflow. | Implemented; real ComfyUI restart qualification pending |
@@ -33,6 +33,7 @@ does not guarantee them. Real anime and GPU qualification is still pending.
 | P-11 | For source content whose long-to-short ratio is within 2% of 16:9, save exact 16:9 exported render frames after generation-canvas padding is removed: 1280x720 at the standard 720-pixel short side, or 720x1280 for portrait. Center-crop only the exported/finished frame; raw generated frames and the reviewed canvas remain unchanged. Finishing those candidates at 1080p, 1440p and 4K saves 1920x1080, 2560x1440 and 3840x2160 (portrait counterparts included). Sources outside tolerance retain their existing aspect ratio behavior. | Implemented locally; GPU and visual qualification pending |
 | P-12 | After Render, finish any saved candidate again with Fast (FFmpeg Lanczos), Balanced AI (installed anime weights in supported FP16 with adaptive tiles), or Original AI (existing Real-ESRGAN path). New workflows default to Fast at 1080p; existing Upscale nodes retain Original AI and 1440p defaults. Every finish keeps frame count, FPS, silent MP4, lossless frames, aspect/crop rules and the candidate unchanged, with its method recorded. | Implemented in source; Python, installed ComfyUI, GPU speed and visual verification pending |
 | P-13 | Use only the Comfy LTX Loop public identity: `comfy-ltx-loop` for commands and hyphenated paths, `comfy_ltx_loop` for Python/import paths, `ComfyLTXLoop…` for node types, and `Comfy LTX Loop` for display text. Previous names, commands, saved workflows, records, routes, output paths and environment variables are intentionally unsupported. | Implemented locally; deployment/GPU qualification unchanged and pending |
+| P-14 | Choose independently whether character and background points guide the next Render. Switching a group off preserves its points; older workflows start with both groups on. Render accepts either group, both or no active points. With no active points, load an image, set character and optional background motion text, and Render directly without Prepare, Qwen or point review. Text still guides motion; a saved candidate records that point review was unnecessary. Re-enabling points requires renewed review and only active groups require current preparation. | Implemented in source; installed ComfyUI and visual qualification pending |
 
 "Implemented" describes repository behavior and existing evidence. It does not
 mean this session reran all tests or that a production GPU run was accepted.
@@ -77,6 +78,12 @@ behavioral test first, implement code to make it green, then refactor and verify
 Update [codemap.md](../codemap.md) whenever project structure changes.
 
 ## Delivery notes
+
+- 2026-10-16: P-14 adds optional character/background track groups and direct
+  text-guided Render without active points. Local Python and Node tests passed;
+  the fixture served the editor over HTTP. Installed ComfyUI, GPU and visual checks
+  remain pending. See the [optional points design](superpowers/specs/2026-10-16-optional-points-design.md)
+  and [plan](superpowers/plans/2026-10-16-optional-points.md).
 
 - 2026-10-09: Completed the intentional breaking rebrand to Comfy LTX Loop. It replaces
   every tracked legacy identifier and persisted key; no compatibility aliases or

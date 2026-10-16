@@ -16,6 +16,8 @@ for the required workflow.
 | [Project workflow plan](plans/2026-10-08-project-workflow.md) | Setup tasks and verification evidence |
 | [Comfy LTX Loop rebrand](specs/2026-10-09-comfy-ltx-loop-rebrand-design.md) | Breaking replacement of all legacy naming and persisted identifiers |
 | [Comfy LTX Loop rebrand plan](plans/2026-10-09-comfy-ltx-loop-rebrand.md) | Rebrand delivery and verification ledger |
+| [Optional points design](specs/2026-10-16-optional-points-design.md) | Group switches and direct Render without point review |
+| [Optional points plan](plans/2026-10-16-optional-points.md) | Test-first implementation and verification ledger |
 
 ## Existing implementation history
 

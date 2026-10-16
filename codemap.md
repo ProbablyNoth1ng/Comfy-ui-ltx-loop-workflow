@@ -1,6 +1,6 @@
 # Comfy LTX Loop code map
 
-Updated: 2026-10-09. Read this before locating code. Update it in the same change
+Updated: 2026-10-16. Read this before locating code. Update it in the same change
 whenever files/directories are added, deleted, renamed or moved, or module ownership
 changes. Confirm details against source; this is navigation, not a substitute for code.
 
@@ -11,6 +11,7 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 | Product intent and accepted behavior | `docs/product-spec.md` | `docs/superpowers/specs/2026-10-09-comfy-ltx-loop-rebrand-design.md`, baseline and render designs |
 | Development workflow and new specs | `AGENTS.md`, `docs/superpowers/README.md` | Workflow design and plan under `docs/superpowers/` |
 | Motion plans, roles, groups, review, timing and canvas mapping | `comfy_ltx_loop/motion.py` | `tests/test_motion.py`, `tests/test_semantic_points.py` |
+| Optional point-group selection and direct Render | `comfy_ltx_loop/motion.py`, `staged_comfy.py`, editor web module | `tests/test_motion.py`, `tests/test_stages.py`, `tests/test_editor_semantics.mjs` |
 | Automatic character/background point proposals and model cleanup | `comfy_ltx_loop/vision.py` | `tests/test_vision.py` |
 | Prepare/Render/Upscale backend node interfaces | `comfy_ltx_loop/staged_comfy.py` | `tests/test_stages.py` |
 | Points UI, background controls, review and previews | `comfy_nodes/comfy_ltx_loop/web/comfy_ltx_loop.js` | `tests/test_editor_semantics.mjs`, `tests/test_previews.mjs`, `tests/editor_harness.py` |
@@ -37,6 +38,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 - `docs/superpowers/specs/2026-10-09-comfy-ltx-loop-rebrand-design.md` and
   `docs/superpowers/plans/2026-10-09-comfy-ltx-loop-rebrand.md`: canonical naming,
   breaking-compatibility boundary and delivery evidence.
+- `docs/superpowers/specs/2026-10-16-optional-points-design.md` and
+  `docs/superpowers/plans/2026-10-16-optional-points.md`: optional track groups,
+  direct no-point Render and verification.
 
 ## Complete maintained project tree
 
@@ -99,13 +103,15 @@ anime-loop-research/
 │       │   ├── 2026-10-08-exact-16x9-render.md
 │       │   ├── 2026-10-08-faster-finishing.md
 │       │   ├── 2026-10-08-project-workflow.md
-│       │   └── 2026-10-09-comfy-ltx-loop-rebrand.md
+│       │   ├── 2026-10-09-comfy-ltx-loop-rebrand.md
+│       │   └── 2026-10-16-optional-points.md
 │       └── specs/
 │           ├── 2026-10-08-comfy-ltx-loop-baseline-design.md
 │           ├── 2026-10-08-exact-16x9-render-design.md
 │           ├── 2026-10-08-faster-finishing-design.md
 │           ├── 2026-10-08-project-workflow-design.md
-│           └── 2026-10-09-comfy-ltx-loop-rebrand-design.md
+│           ├── 2026-10-09-comfy-ltx-loop-rebrand-design.md
+│           └── 2026-10-16-optional-points-design.md
 ├── evidence/
 │   ├── comfy-local-validation.json   Historical local validation record
 │   ├── flf.json                      Reference workflow evidence

@@ -8,6 +8,50 @@ from comfy_ltx_loop.motion import (new_plan, parse_landmarks, validate_plan,
 
 
 class MotionTests(unittest.TestCase):
+    def test_point_group_switches_filter_four_track_sets_and_preserve_points(self):
+        plan = self.plan()
+        plan['landmarks'].append({**copy.deepcopy(plan['landmarks'][0]),
+                                  'label':'leaf','group':'background'})
+        plan['background'] = {'enabled':True,'prompt':'Leaves sway','preparation':'manual',
+                              'prepared_prompt':'Leaves sway','prepared_preparation':'manual'}
+        for character, background, count in [(True,True,2),(True,False,1),
+                                              (False,True,1),(False,False,0)]:
+            with self.subTest(character=character, background=background):
+                plan['use_character_points'] = character
+                plan['use_background_points'] = background
+                self.assertEqual(len(canvas_tracks(plan)),count)
+                self.assertEqual(len(plan['landmarks']),2)
+        del plan['use_character_points'], plan['use_background_points']
+        self.assertEqual(len(canvas_tracks(plan)),2)
+
+    def test_disabled_group_skips_stale_preparation_and_switch_invalidates_review(self):
+        plan = self.plan()
+        plan['analysis'] = {'preparation':'manual','model_path':'model',
+                            'prepared_prompt':'old prompt','prepared_requested':['hair tip'],
+                            'prepared_preparation':'manual','prepared_model_path':'model'}
+        plan['use_character_points'] = False
+        plan['use_background_points'] = False
+        plan['review'] = {'state':'not_required'}
+        self.assertEqual(canvas_tracks(plan),[])
+        plan['use_character_points'] = True
+        with self.assertRaisesRegex(ValueError,'Prepare character'):
+            review_plan(plan)
+        plan['analysis']['prepared_prompt'] = plan['prompt']
+        reviewed = review_plan(plan)
+        reviewed['use_character_points'] = False
+        with self.assertRaisesRegex(ValueError,'review'):
+            require_review(reviewed,'abc',(600,1000),reviewed['prompt'],6,24,.01,720)
+
+    def test_reviewed_plan_cannot_activate_saved_background_points_with_new_text(self):
+        plan = self.plan()
+        plan['landmarks'].append({**copy.deepcopy(plan['landmarks'][0]),
+                                  'label':'leaf','group':'background'})
+        plan['background'] = {'enabled':False,'prompt':'','preparation':'manual'}
+        reviewed = review_plan(plan)
+        with self.assertRaisesRegex(ValueError,'review'):
+            require_review(reviewed,'abc',(600,1000),reviewed['prompt'],6,24,.01,720,
+                background={'enabled':True,'prompt':'Leaves sway','preparation':'manual'})
+
     def test_background_review_tracks_and_legacy_fingerprint(self):
         legacy = review_plan(self.plan())
         fingerprint = legacy['review']['fingerprint']
@@ -32,6 +76,9 @@ class MotionTests(unittest.TestCase):
         plan = self.plan()
         plan['background'] = {'enabled':True,'prompt':'Leaves sway','preparation':'model',
                               'prepared_prompt':'Leaves sway','prepared_preparation':'model'}
+        plan['landmarks'].append({**copy.deepcopy(plan['landmarks'][0]), 'group':'background',
+                                  'motion_role':'anchor', 'body_part':'tree', 'reason':'stationary',
+                                  'path':[{'t':0,'x':.5,'y':.5},{'t':1,'x':.5,'y':.5}]})
         with self.assertRaisesRegex(ValueError, 'moving background'):
             review_plan(plan)
         plan['landmarks'].append({**plan['landmarks'][0], 'group':'background'})

@@ -9,6 +9,76 @@ from comfy_ltx_loop.staged_comfy import ComfyLTXLoopMotionEditor, ComfyLTXLoopSa
 
 
 class StageTests(unittest.TestCase):
+    def test_direct_render_without_preparation_uses_empty_tracks_and_text(self):
+        import numpy as np
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image), \
+             patch('comfy_ltx_loop.staged_comfy.analyze') as analyze:
+            result = ComfyLTXLoopMotionEditor().execute(image,'Hair sways','auto',6,24,.01,720,
+                42,'model','local Qwen3.5','{}','render',background_prompt='Leaves sway')
+        analyze.assert_not_called()
+        self.assertEqual(json.loads(result['result'][1]),[])
+        plan = result['result'][2]
+        self.assertEqual(plan['review']['state'],'not_required')
+        self.assertIn('Hair sways',result['result'][6])
+        self.assertIn('Background motion: Leaves sway',result['result'][6])
+
+    def test_saved_points_with_both_groups_off_render_without_review(self):
+        import hashlib
+        import numpy as np
+        from comfy_ltx_loop.motion import new_plan
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        identity = hashlib.sha256(image[0].astype(np.uint8).tobytes()+str((80,100)).encode()).hexdigest()
+        old = new_plan(identity,(80,100),'old text',['auto'],[{'label':'tip','x':.3,'y':.4}])
+        old['landmarks'].append({**old['landmarks'][0],'label':'leaf','group':'background'})
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image):
+            result = ComfyLTXLoopMotionEditor().execute(image,'new text','auto',6,24,.01,720,
+                42,'model','manual',json.dumps(old),'render',background_prompt='Leaves sway',
+                use_character_points=False,use_background_points=False)
+        self.assertEqual(json.loads(result['result'][1]),[])
+        self.assertEqual(len(result['result'][2]['landmarks']),2)
+        self.assertEqual(result['result'][2]['review']['state'],'not_required')
+
+    def test_direct_render_preserves_preparation_history_for_reenabled_points(self):
+        import hashlib
+        import numpy as np
+        from comfy_ltx_loop.motion import new_plan, review_plan
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        identity = hashlib.sha256(image[0].astype(np.uint8).tobytes()+str((80,100)).encode()).hexdigest()
+        old = new_plan(identity,(80,100),'old hair',['auto'],[{'label':'tip','x':.3,'y':.4}])
+        old['analysis'] = {'preparation':'manual','model_path':'model',
+                           'prepared_prompt':'old hair','prepared_requested':['auto'],
+                           'prepared_preparation':'manual','prepared_model_path':'model'}
+        old['landmarks'].append({**old['landmarks'][0],'label':'leaf','group':'background'})
+        old['background'] = {'enabled':True,'prompt':'Old leaves','preparation':'manual',
+                             'prepared_prompt':'Old leaves','prepared_preparation':'manual'}
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image):
+            rendered = ComfyLTXLoopMotionEditor().execute(image,'new hair','auto',6,24,.01,720,
+                42,'model','manual',json.dumps(old),'render',background_prompt='New leaves',
+                background_preparation='manual',use_character_points=False,
+                use_background_points=False)['result'][2]
+        rendered['use_character_points'] = True
+        with self.assertRaisesRegex(ValueError,'Prepare character'):
+            review_plan(rendered)
+        rendered['use_character_points'] = False
+        rendered['use_background_points'] = True
+        with self.assertRaisesRegex(ValueError,'Prepare background'):
+            review_plan(rendered)
+
+    def test_enabling_background_text_activates_saved_background_points(self):
+        import hashlib
+        import numpy as np
+        from comfy_ltx_loop.motion import new_plan
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        identity = hashlib.sha256(image[0].astype(np.uint8).tobytes()+str((80,100)).encode()).hexdigest()
+        old = new_plan(identity,(80,100),'hair',['auto'],[{'label':'leaf','x':.3,'y':.4}])
+        old['landmarks'][0]['group'] = 'background'
+        old['background'] = {'enabled':False,'prompt':'','preparation':'manual'}
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image):
+            with self.assertRaisesRegex(ValueError,'review'):
+                ComfyLTXLoopMotionEditor().execute(image,'hair','auto',6,24,.01,720,
+                    42,'model','manual',json.dumps(old),'render',background_prompt='Leaves sway')
+
     def test_new_finish_defaults_and_old_upscale_contract(self):
         modern = ComfyLTXLoopFinish.INPUT_TYPES()['required']
         legacy = ComfyLTXLoopUpscale.INPUT_TYPES()['required']
@@ -249,10 +319,12 @@ class StageTests(unittest.TestCase):
 
     def test_render_never_analyzes_and_stale_review_fails(self):
         import numpy as np
+        from comfy_ltx_loop.motion import new_plan
         image = np.zeros((1,100,80,3),dtype=np.float32)
+        old = new_plan('stale',(80,100),'hair',['hair tip'],[{'label':'tip','x':.3,'y':.4}])
         with patch('comfy_ltx_loop.staged_comfy.image_array',return_value=image[0].astype(np.uint8)), \
              patch('comfy_ltx_loop.staged_comfy.analyze') as analysis:
             with self.assertRaises(ValueError):
                 ComfyLTXLoopMotionEditor().execute(image,'hair','hair tip',6,24,.01,720,
-                             42,'Qwen3-VL-8B-Instruct','local Qwen','{}','render')
+                             42,'Qwen3-VL-8B-Instruct','local Qwen',json.dumps(old),'render')
         analysis.assert_not_called()

@@ -20,7 +20,7 @@ test('Preparation uses original image and saved selection has no generation link
   const editor=adapted.nodes.find(n=>n.type==='ComfyLTXLoopMotionEditor');
   assert.equal(editor.widgets_values[7],'models/Qwen3.5-9B');
   assert.deepEqual(editor.widgets_values.slice(8,11),['local Qwen3.5','{}','render']);
-  assert.deepEqual(editor.widgets_values.slice(11),[false,'','model','character']);
+  assert.deepEqual(editor.widgets_values.slice(11),[false,'','model','character',true,true]);
   const link=adapted.links.find(l=>l[0]===editor.inputs[0].link);
   assert.equal(adapted.nodes.find(n=>n.id===link[1]).type,'LoadImage');
   const selector=adapted.nodes.find(n=>n.type==='ComfyLTXLoopSavedCandidate');

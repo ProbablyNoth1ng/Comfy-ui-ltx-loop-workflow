@@ -25,8 +25,8 @@ async function queue(stage, target, status, expectedGraph, prepareTarget='charac
         console.info('[comfy-ltx-loop] queue', {stage,targetId:target.id,targetClass:target.comfyClass??target.type});
         if(stage==='render') {
             const editor=find('ComfyLTXLoopMotionEditor');
-            checkSettings(editor);
-            if(JSON.parse(widget(editor,'plan_json').value).review?.state!=='reviewed') {
+            const plan=checkSettings(editor);
+            if(plan && plan.review?.state!=='reviewed') {
                 throw new Error('Review points and click Accept point review before Render.');
             }
         }
@@ -38,8 +38,8 @@ async function queue(stage, target, status, expectedGraph, prepareTarget='charac
         }
         if(stage==='render') {
             const editor=find('ComfyLTXLoopMotionEditor');
-            checkSettings(editor);
-            if(JSON.parse(widget(editor,'plan_json').value).review?.state!=='reviewed') {
+            const plan=checkSettings(editor);
+            if(plan && plan.review?.state!=='reviewed') {
                 throw new Error('Review points and click Accept point review before Render.');
             }
         }
@@ -94,7 +94,7 @@ function showStageChooser(graph) {
     dialog.setAttribute('aria-label','Choose an Comfy LTX Loop stage');
     const title=element('h2',dialog,'Choose an Comfy LTX Loop stage');
     title.id='comfy_ltx_loop-stage-title';dialog.setAttribute('aria-labelledby',title.id);
-    const copy=element('p',dialog,'Prepare points, review them, then Render. Upscale uses a saved candidate. Each choice queues one stage.');
+    const copy=element('p',dialog,'Render directly with no active points, or Prepare and review the points you use. Upscale uses a saved candidate. Each choice queues one stage.');
     copy.id='comfy_ltx_loop-stage-copy';dialog.setAttribute('aria-describedby',copy.id);
     const status=element('p',dialog);status.setAttribute('role','status');
     const actions=element('div',dialog);
@@ -141,18 +141,28 @@ function showAutoQueueNotice() {
 function checkSettings(node) {
     if(!node)throw new Error('Load the motion editor first.');
     const p=JSON.parse(widget(node,'plan_json').value);
-    if(p.schema!=='comfy-ltx-loop-motion-plan/1')throw new Error('Prepare a valid motion plan before Render.');
+    if(p.schema!=='comfy-ltx-loop-motion-plan/1' && Object.keys(p).length)
+        throw new Error('Prepare a valid motion plan before Render.');
     const value=name=>widget(node,name)?.value;
+    const useCharacter=value('use_character_points')!==false;
+    const useBackground=value('use_background_points')!==false;
+    const backgroundEnabled=String(value('background_prompt')??'').trim().length>0;
+    const active=point=>point.enabled&&(point.group==='background'
+        ?useBackground&&backgroundEnabled:useCharacter);
+    if(!p.landmarks?.some(active))return null;
+    if((p.use_character_points??true)!==useCharacter||(p.use_background_points??true)!==useBackground)
+        throw new Error('Point group selection changed; review points again.');
     const requested=String(value('requested_parts')).split(',').map(s=>s.trim()).filter(Boolean);
-    if(p.prompt!==value('motion_prompt')||JSON.stringify(p.requested)!==JSON.stringify(requested))
+    const characterActive=p.landmarks.some(point=>active(point)&&point.group!=='background');
+    const backgroundActive=p.landmarks.some(point=>active(point)&&point.group==='background');
+    if(characterActive&&(p.prompt!==value('motion_prompt')||JSON.stringify(p.requested)!==JSON.stringify(requested)))
         throw new Error('Prepare character points for the changed prompt or requested parts.');
-    if(p.analysis?.prepared_prompt!==undefined &&
+    if(characterActive&&p.analysis?.prepared_prompt!==undefined &&
        (p.analysis.prepared_preparation!==value('preparation')||p.analysis.prepared_model_path!==value('vision_model')))
         throw new Error('Prepare character points for changed preparation settings.');
-    const backgroundEnabled=String(value('background_prompt')??'').trim().length>0;
-    if((p.background?.enabled??false)!==backgroundEnabled)
+    if(backgroundActive&&(p.background?.enabled??false)!==backgroundEnabled)
         throw new Error('Background motion changed; review points again.');
-    if(backgroundEnabled){
+    if(backgroundActive){
         if(p.background.prompt!==value('background_prompt')||p.background.preparation!==value('background_preparation')||
            p.background.prepared_prompt!==p.background.prompt||p.background.prepared_preparation!==p.background.preparation||
            (p.background.preparation==='model'&&p.background.prepared_model_path!==undefined&&
@@ -202,7 +212,21 @@ function editor(node) {
     if(bgPrompt)bgPrompt.label='Background motion';
     if(bgPreparation)bgPreparation.label='Background preparation';
     hide(node,'animate_background');
-    const status=element('p',root,'Load an image, then Prepare points. Choose manual preparation to skip Qwen.');
+    const status=element('p',root,'Load an image, then Render without points or Prepare and review the points you use.');
+    const pointSwitches=element('div',root);
+    const groupSwitches={};
+    for(const [name,title] of [['use_character_points','Use character points'],
+                               ['use_background_points','Use background points']]) {
+        const holder=element('label',pointSwitches,title+' ');
+        const control=element('input',holder);control.type='checkbox';control.title=title;
+        control.checked=widget(node,name)?.value!==false;
+        groupSwitches[name]=control;
+        control.onchange=()=>{
+            widget(node,name).value=control.checked;
+            const p=plan();if(!validPlan(p))return;
+            p[name]=control.checked;save(p);selection(p);
+        };
+    }
     const canvas=element('canvas',root);canvas.width=480;canvas.height=300;
     Object.assign(canvas.style,{width:'100%',height:'300px',objectFit:'contain',touchAction:'none',background:'#080a0f'});
     const groupControl=element('select',root);groupControl.title='New point group';
@@ -340,14 +364,18 @@ function editor(node) {
     function renderList() {
         pointList.replaceChildren();
         const current=plan(),points=current.landmarks;
-        if(reviewButton)reviewButton.disabled=!validPlan(current)||!points.some(point=>point.enabled)||
-            (!!current.background?.enabled&&!points.some(point=>group(point)==='background'&&point.enabled&&pointRole(point)==='move'));
+        const active=point=>point.enabled&&(group(point)==='background'
+            ?groupSwitches.use_background_points.checked&&!!String(bgPrompt?.value??'').trim()
+            :groupSwitches.use_character_points.checked);
+        if(reviewButton)reviewButton.disabled=!validPlan(current)||!points.some(active)||
+            (points.some(point=>active(point)&&group(point)==='background')&&
+             !points.some(point=>active(point)&&group(point)==='background'&&pointRole(point)==='move'));
         if(!validPlan(current)) {
-            element('p',pointList,'No valid motion plan. Run Prepare points.');
+            element('p',pointList,'No motion plan. Render directly without points, or run Prepare points.');
             return;
         }
         if(!points.length) {
-            element('p',pointList,'No landmarks yet. Click Add point, then click the image. Review requires at least one enabled point.');
+            element('p',pointList,'No landmarks yet. Render directly, or click Add point after Prepare.');
             return;
         }
         for(const name of (visibilityControl.value==='all'?['character','background']:[visibilityControl.value])) {
@@ -512,9 +540,10 @@ function editor(node) {
         widget(node,'plan_json').value=JSON.stringify(incoming);selected=-1;
         persist(incoming);selection(incoming);
         node.properties.comfy_ltx_loop_source_image=widget(find('LoadImage')??{},'image')?.value;
-        status.textContent=(Array.isArray(incoming.feedback)?incoming.feedback:[]).join(' ')||(incoming.landmarks.length
+        status.textContent=incoming.review?.state==='not_required'?'Rendered without point review.':
+            (Array.isArray(incoming.feedback)?incoming.feedback:[]).join(' ')||(incoming.landmarks.length
             ?'Review and edit points, then accept point review.'
-            :'No landmarks proposed. Add at least one point manually before review.');
+            :'No landmarks proposed. Render directly or add a point manually before review.');
         if(message.bg_image)background.src='data:image/png;base64,'+message.bg_image[0];draw();
     };
     const configured=node.onConfigure;
@@ -522,6 +551,10 @@ function editor(node) {
         const stored=app.graph.extra?.comfy_ltx_loop_motion_plans?.[String(node.id)];
         if(!plan().schema&&stored)widget(node,'plan_json').value=JSON.stringify(stored);
         const reopened=plan(),enabledByPrompt=!!String(bgPrompt?.value??'').trim();
+        for(const [name,control] of Object.entries(groupSwitches)) {
+            control.checked=validPlan(reopened)?reopened[name]??true:widget(node,name)?.value!==false;
+            widget(node,name).value=control.checked;
+        }
         if(validPlan(reopened) && (reopened.background?.enabled??false)!==enabledByPrompt) {
             reopened.background={...(reopened.background??{}),enabled:enabledByPrompt,
                 prompt:bgPrompt?.value??'',preparation:bgPreparation?.value??'model'};

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .motion import validate_plan, plan_fingerprint
+from .motion import validate_plan, plan_fingerprint, active_point
 from .project import atomic_json, sha
 
 
@@ -107,7 +107,9 @@ def save_record(out, record):
 
 def save_candidate(images, plan, seed, root, settings):
     validate_plan(plan)
-    if plan.get('review',{}).get('fingerprint') != plan_fingerprint(plan):
+    no_review_needed = (plan.get('review',{}).get('state') == 'not_required' and
+                        not any(active_point(plan, point) for point in plan['landmarks']))
+    if not no_review_needed and plan.get('review',{}).get('fingerprint') != plan_fingerprint(plan):
         raise ValueError('Reviewed plan required before saving a candidate')
     if len(images) != plan['frames']:
         raise ValueError(f"Expected {plan['frames']} generated frames including the endpoint")

@@ -4,6 +4,17 @@ Status: **pending**. No provider instance was available. Local CPU tests do not
 prove LTX inference, Qwen anime landmark accuracy, Spandrel weight compatibility
 or ComfyUI browser behavior on a provider.
 
+## 2026-10-16 optional points implementation
+
+Local tests cover direct Render with `[]`, no Qwen call, text guidance, selective
+track groups, review invalidation and candidate metadata. The editor fixture is
+a simulated queue. The installed ComfyUI-LTXVideo revision, its empty-track guide
+frame, downstream inference, GPU memory use and resulting anime motion have not
+been run or visually accepted here. On deployment, capture the exported Render
+API graph and stage history for character-only, background-only, both and no-point
+runs; verify the saved candidate records `review.state=not_required` only for
+the no-point run, then inspect motion, camera stability and loop seam.
+
 ## 2026-10-08 faster finishing implementation
 
 The source now offers Fast (FFmpeg Lanczos), Balanced AI (installed anime weights

@@ -18,7 +18,8 @@ async function fixture() {
   globalThis.Image=class {naturalWidth=600;naturalHeight=900;set src(value){this.source=value;this.onload?.();}};
   const values={motion_prompt:'Hair sway. Face still.',requested_parts:'auto',duration:6,fps:24,strength:.01,
     short_side:720,seed:42,vision_model:'models/Qwen3-VL-8B-Instruct',preparation:'local Qwen3.5',plan_json:'{}',stage:'render',
-    animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character'};
+    animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character',
+    use_character_points:true,use_background_points:true};
   const node={id:2,type:'ComfyLTXLoopMotionEditor',size:[520,300],properties:{},
     widgets:Object.entries(values).map(([name,value])=>({name,value})),
     addDOMWidget(name,type,root){this.root=root;return{};},setSize(size){this.size=size;}};
@@ -54,6 +55,41 @@ test('Qwen preparation populates bundled paths while preserving custom and seria
   f.widget('vision_model').value='/custom/snapshot';mode.value='local Qwen3.5';mode.callback?.(mode.value);
   assert.equal(f.widget('vision_model').value,'/custom/snapshot');
   f.node.onConfigure();assert.equal(f.widget('vision_model').value,'/custom/snapshot');
+});
+
+test('point group switches preserve saved points and require renewed review on reopen',async()=>{
+  const f=await fixture();
+  await f.button('Accept point review').onclick();
+  const character=f.control('Use character points');
+  const scenery=f.control('Use background points');
+  assert.ok(character);assert.ok(scenery);
+  character.checked=false;character.onchange();
+  scenery.checked=false;scenery.onchange();
+  assert.equal(f.plan().review.state,'pending');
+  assert.equal(f.plan().landmarks.length,24);
+  assert.equal(f.plan().use_character_points,false);
+  assert.equal(f.plan().use_background_points,false);
+  f.widget('plan_json').value='{}';f.node.onConfigure();
+  assert.equal(f.plan().use_character_points,false);
+  assert.equal(f.plan().landmarks.length,24);
+  character.checked=true;character.onchange();
+  assert.equal(f.plan().review.state,'pending');
+});
+
+test('direct Render queues without a prepared plan',async()=>{
+  const f=await fixture();
+  f.widget('plan_json').value='{}';
+  f.app.graph._nodes.push({id:5,type:'ComfyLTXLoopSaveCandidate'});
+  f.app.graphToPrompt=async()=>({workflow:{},output:{
+    '1':{class_type:'LoadImage',inputs:{}},
+    '2':{class_type:'ComfyLTXLoopMotionEditor',inputs:{image:['1',0],plan_json:'{}'}},
+    '5':{class_type:'ComfyLTXLoopSaveCandidate',inputs:{motion_plan:['2',2]}}
+  }});
+  let queued;
+  globalThis.comfy_ltx_loopEditorFixture.api.queuePrompt=async(_index,prompt)=>{queued=prompt;return{prompt_id:'render'};};
+  await f.button('Render').onclick();
+  assert.equal(queued.output['2'].inputs.stage,'render');
+  assert.equal(Object.keys(queued.output).length,3);
 });
 
 test('dense landmarks select nearest dot, edit roles and retain semantic edits on reopen',async()=>{

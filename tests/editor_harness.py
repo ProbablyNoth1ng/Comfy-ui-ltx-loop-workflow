@@ -77,7 +77,8 @@ const make=(id,type,values,parent)=>({id,type,comfyClass:type,size:[520,300],pro
 const editor=make(2,'ComfyLTXLoopMotionEditor',{motion_prompt:'Gentle hair sway. Stationary camera.',
  requested_parts:'hair tip, hair root, head, shoulder',duration:6,fps:24,strength:.01,short_side:720,seed:42,
  vision_model:'models/Qwen3-VL-8B-Instruct',preparation:'manual',plan_json:'{}',stage:'render',
- animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character'},document.querySelector('#editor'));
+ animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character',
+ use_character_points:true,use_background_points:true},document.querySelector('#editor'));
 const saver=make(5,'ComfyLTXLoopSaveCandidate',{},document.querySelector('#outputs'));
 const selector=make(6,'ComfyLTXLoopSavedCandidate',{candidate:'Select a saved candidate'},document.querySelector('#outputs'));
 const upscale=make(7,'ComfyLTXLoopUpscale',{resolution:'1440p',chunk_size:4},document.querySelector('#outputs'));

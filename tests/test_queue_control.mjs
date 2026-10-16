@@ -88,7 +88,7 @@ test('stage choices disable missing targets and ambiguous Render editors', () =>
   const ambiguous={_nodes:[{id:2,comfyClass:'ComfyLTXLoopMotionEditor'},{id:3,comfyClass:'ComfyLTXLoopMotionEditor'},{id:5,comfyClass:'ComfyLTXLoopSaveCandidate'}]};
   const disabled=resolveStageTargets(ambiguous);
   assert.match(disabled.render.reason,/exactly one motion editor/i);
-  assert.match(disabled.upscale.reason,/Comfy LTX Upscale/i);
+  assert.match(disabled.upscale.reason,/Comfy LTX Loop Upscale/i);
 });
 
 test('a captured stage target cannot submit after a graph change or removal', () => {

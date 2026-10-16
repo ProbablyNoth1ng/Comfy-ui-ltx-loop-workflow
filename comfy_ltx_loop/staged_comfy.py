@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .motion import new_plan, require_review, canvas_tracks, validate_plan
+from .motion import new_plan, require_review, canvas_tracks, validate_plan, active_point
 from .vision import analyze
 from .candidates import save_candidate, load_handle, finish_candidate, list_candidates
 
@@ -66,7 +66,9 @@ class ComfyLTXLoopMotionEditor:
                 'background_prompt':('STRING',{'default':'','multiline':True,
                     'placeholder':'Example: Gently sway the visible leaves; keep the tree trunk still.'}),
                 'background_preparation':(['model','manual'],{'default':'model'}),
-                'prepare_target':(['character','background','both'],{'default':'character'})},
+                'prepare_target':(['character','background','both'],{'default':'character'}),
+                'use_character_points':('BOOLEAN',{'default':True}),
+                'use_background_points':('BOOLEAN',{'default':True})},
             'hidden':{'extra_pnginfo':'EXTRA_PNGINFO','unique_id':'UNIQUE_ID'}}
 
     RETURN_TYPES = ('IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING')
@@ -82,7 +84,7 @@ class ComfyLTXLoopMotionEditor:
     def execute(self,image,motion_prompt,requested_parts,duration,fps,strength,short_side,
                 seed,vision_model,preparation,plan_json,stage,extra_pnginfo=None,unique_id=None,
                 animate_background=False,background_prompt='',background_preparation='model',
-                prepare_target='character'):
+                prepare_target='character',use_character_points=True,use_background_points=True):
         pixels = image_array(image)
         source = Image.fromarray(pixels)
         identity = hashlib.sha256(pixels.tobytes()+str(source.size).encode()).hexdigest()
@@ -146,6 +148,8 @@ class ComfyLTXLoopMotionEditor:
                         if target == 'background': point['group'] = 'background'
                         plan['landmarks'].append(point)
                 plan['background'] = background
+                plan['use_character_points'] = use_character_points
+                plan['use_background_points'] = use_background_points
                 old = plan
             validate_plan(plan)
         elif stage == 'render':
@@ -153,11 +157,38 @@ class ComfyLTXLoopMotionEditor:
                 plan = json.loads(plan_json)
             except json.JSONDecodeError as error:
                 raise ValueError('Invalid saved plan; Prepare and review points') from error
-            require_review(plan,identity,source.size,motion_prompt,duration,fps,strength,short_side,
-                           requested=requested,analysis=analysis,background=background)
-            plan['requested'] = requested
-            if 'prepared_prompt' not in plan.get('analysis', {}):
-                plan['analysis'] = analysis
+            if plan == {}:
+                plan = new_plan(identity,source.size,motion_prompt,requested,[],
+                                duration,fps,strength,short_side,analysis=analysis)
+                plan['background'] = background
+            else:
+                validate_plan(plan)
+            if (plan.get('use_character_points',True) != use_character_points or
+                    plan.get('use_background_points',True) != use_background_points):
+                plan['review'] = {'state':'pending'}
+            plan['use_character_points'] = use_character_points
+            plan['use_background_points'] = use_background_points
+            effective = {**plan, 'background':background}
+            if not any(active_point(effective,point) for point in plan['landmarks']):
+                preserved = plan['landmarks'] if plan['source_id'] == identity else []
+                fresh = new_plan(identity,source.size,motion_prompt,requested,[],
+                                 duration,fps,strength,short_side,analysis=analysis)
+                fresh['landmarks'] = preserved
+                if preserved:
+                    fresh['analysis'] = {**plan.get('analysis', {}), **analysis}
+                    fresh['background'] = {**plan.get('background', {}), **background}
+                else:
+                    fresh['background'] = background
+                fresh['use_character_points'] = use_character_points
+                fresh['use_background_points'] = use_background_points
+                fresh['review'] = {'state':'not_required'}
+                plan = validate_plan(fresh)
+            else:
+                require_review(plan,identity,source.size,motion_prompt,duration,fps,strength,short_side,
+                               requested=requested,analysis=analysis,background=background)
+                plan['requested'] = requested
+                if 'prepared_prompt' not in plan.get('analysis', {}):
+                    plan['analysis'] = analysis
         else:
             raise ValueError('Choose Prepare or Render')
         canvas = canvas_image(source,plan['transform'])
