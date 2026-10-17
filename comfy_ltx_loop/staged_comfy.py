@@ -68,11 +68,12 @@ class ComfyLTXLoopMotionEditor:
                 'background_preparation':(['model','manual'],{'default':'model'}),
                 'prepare_target':(['character','background','both'],{'default':'character'}),
                 'use_character_points':('BOOLEAN',{'default':True}),
-                'use_background_points':('BOOLEAN',{'default':True})},
+                'use_background_points':('BOOLEAN',{'default':True}),
+                'render_mode':(['free_motion','only_pointed_parts'],{'default':'free_motion'})},
             'hidden':{'extra_pnginfo':'EXTRA_PNGINFO','unique_id':'UNIQUE_ID'}}
 
-    RETURN_TYPES = ('IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING')
-    RETURN_NAMES = ('canvas','tracks','motion_plan','fps','duration','seed','prompt')
+    RETURN_TYPES = ('IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING','IMAGE')
+    RETURN_NAMES = ('canvas','tracks','motion_plan','fps','duration','seed','prompt','source_image')
     FUNCTION = 'execute'
     CATEGORY = 'comfy-ltx-loop/staged'
     OUTPUT_NODE = True
@@ -84,7 +85,10 @@ class ComfyLTXLoopMotionEditor:
     def execute(self,image,motion_prompt,requested_parts,duration,fps,strength,short_side,
                 seed,vision_model,preparation,plan_json,stage,extra_pnginfo=None,unique_id=None,
                 animate_background=False,background_prompt='',background_preparation='model',
-                prepare_target='character',use_character_points=True,use_background_points=True):
+                prepare_target='character',use_character_points=True,use_background_points=True,
+                render_mode='free_motion'):
+        if render_mode not in ('free_motion','only_pointed_parts'):
+            raise ValueError('Choose Free motion or Only pointed parts')
         pixels = image_array(image)
         source = Image.fromarray(pixels)
         identity = hashlib.sha256(pixels.tobytes()+str(source.size).encode()).hexdigest()
@@ -150,6 +154,7 @@ class ComfyLTXLoopMotionEditor:
                 plan['background'] = background
                 plan['use_character_points'] = use_character_points
                 plan['use_background_points'] = use_background_points
+                plan['render_mode'] = render_mode
                 old = plan
             validate_plan(plan)
         elif stage == 'render':
@@ -168,8 +173,13 @@ class ComfyLTXLoopMotionEditor:
                 plan['review'] = {'state':'pending'}
             plan['use_character_points'] = use_character_points
             plan['use_background_points'] = use_background_points
+            if plan.get('render_mode', 'free_motion') != render_mode:
+                plan['review'] = {'state':'pending'}
+            plan['render_mode'] = render_mode
             effective = {**plan, 'background':background}
             if not any(active_point(effective,point) for point in plan['landmarks']):
+                if render_mode == 'only_pointed_parts':
+                    raise ValueError('Add or enable a moving point, or switch to Free motion')
                 preserved = plan['landmarks'] if plan['source_id'] == identity else []
                 fresh = new_plan(identity,source.size,motion_prompt,requested,[],
                                  duration,fps,strength,short_side,analysis=analysis)
@@ -205,7 +215,7 @@ class ComfyLTXLoopMotionEditor:
         else:
             render_prompt += '\nStationary camera and stationary background.'
         return {'ui':ui,'result':(canvas,json.dumps(canvas_tracks(plan)),plan,
-                                 float(fps),float(duration),seed,render_prompt)}
+                                 float(fps),float(duration),seed,render_prompt,image)}
 
 
 class ComfyLTXLoopSaveCandidate:
@@ -213,6 +223,7 @@ class ComfyLTXLoopSaveCandidate:
     def INPUT_TYPES(cls):
         return {'required':{'video':('VIDEO',),'motion_plan':('MOTION_PLAN',),
                             'seed':('INT',{'default':42})},
+                'optional':{'source_image':('IMAGE',)},
                 'hidden':{'prompt':'PROMPT','extra_pnginfo':'EXTRA_PNGINFO'}}
     RETURN_TYPES = ('RENDER_HANDLE',)
     RETURN_NAMES = ('candidate',)
@@ -222,13 +233,14 @@ class ComfyLTXLoopSaveCandidate:
     @classmethod
     def IS_CHANGED(cls,**kwargs):
         return float('nan')
-    def execute(self,video,motion_plan,seed,prompt=None,extra_pnginfo=None):
+    def execute(self,video,motion_plan,seed,source_image=None,prompt=None,extra_pnginfo=None):
         components = video.get_components()
         if float(components.frame_rate) != motion_plan['fps']:
             raise ValueError('Decoded FPS differs from the reviewed plan')
         settings = {'recipe':'LTX-2.5-single-stage-motion-track',
                     'api_graph':prompt,'workflow':(extra_pnginfo or {}).get('workflow')}
-        record = save_candidate(components.images,motion_plan,seed,output_root(),settings)
+        source = image_array(source_image) if source_image is not None else None
+        record = save_candidate(components.images,motion_plan,seed,output_root(),settings,source=source)
         return {'ui':preview_ui(record),'result':(record,)}
 
 

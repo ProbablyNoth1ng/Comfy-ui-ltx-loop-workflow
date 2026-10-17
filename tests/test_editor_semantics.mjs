@@ -154,11 +154,11 @@ test('source image clears points and prompt changes invalidate review',async()=>
   assert.equal(f.requests.length,1);
 });
 
-test('background placement uses its group and prompt clearing preserves points',async()=>{
+test('character and background add buttons choose their group and prompt clearing preserves points',async()=>{
   const f=await fixture();
   const prompt=f.widget('background_prompt');prompt.value='Leaves sway';prompt.callback?.(prompt.value);
-  const groups=f.control('New point group');groups.value='background';groups.onchange();
-  f.button('Add point').onclick();
+  assert.equal(f.control('New point group'),undefined);
+  f.button('Add background point').onclick();
   const canvas=f.elements().find(el=>el.tag==='canvas');
   canvas.onpointerdown({clientX:240,clientY:150,pointerId:1});
   assert.equal(f.plan().landmarks.at(-1).group,'background');
@@ -173,11 +173,19 @@ test('background placement uses its group and prompt clearing preserves points',
   f.button('Delete').onclick();
   assert.equal(f.plan().landmarks.length,24);
   assert.equal(f.plan().landmarks.filter(p=>p.group==='background').length,0);
-  f.button('Add point').onclick();canvas.onpointerdown({clientX:240,clientY:150,pointerId:3});
+  f.button('Add background point').onclick();canvas.onpointerdown({clientX:240,clientY:150,pointerId:3});
   prompt.value='   ';prompt.callback?.(prompt.value);
   assert.equal(f.plan().landmarks.length,25);
   assert.equal(f.plan().landmarks.at(-1).group,'background');
   assert.equal(f.plan().background.enabled,false);
+});
+
+test('character add button makes a character point visible',async()=>{
+  const f=await fixture();
+  f.button('Add character point').onclick();
+  const canvas=f.elements().find(el=>el.tag==='canvas');
+  canvas.onpointerdown({clientX:250,clientY:140,pointerId:8});
+  assert.equal(f.plan().landmarks.at(-1).group,'character');
 });
 
 test('visible points filters markers, lists, and selection without changing groups',async()=>{

@@ -16,6 +16,23 @@ from comfy_ltx_loop.motion import new_plan, review_plan
 
 
 class CandidateTests(unittest.TestCase):
+    def test_strict_candidate_restores_protected_source_pixels_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp, patch('comfy_ltx_loop.candidates.encode_previews'):
+            plan = new_plan('abc', (32,32), 'hair', ['tip'], [
+                {'label':'tip','x':.5,'y':.5,'motion_role':'move','body_part':'hair','reason':'sway'}],
+                duration=1, fps=8, short_side=256)
+            plan['render_mode'] = 'only_pointed_parts'
+            point = plan['landmarks'][0]['id']
+            mask = [[255 if 12 <= x < 20 and 12 <= y < 20 else 0 for x in range(32)] for y in range(32)]
+            plan['motion_areas'] = [{'point_id':point,'mask':mask}]
+            plan = review_plan(plan)
+            generated = np.full((9,256,256,3), [0,255,0], dtype=np.uint8)
+            source = np.full((32,32,3), [255,0,0], dtype=np.uint8)
+            handle = save_candidate(generated, plan, 42, Path(tmp), {}, source=source)
+            with Image.open(Path(handle['directory'])/'frames/000000.png') as frame:
+                pixels = np.asarray(frame)
+            self.assertEqual(pixels[0,0].tolist(), [255,0,0])
+            self.assertEqual(pixels[128,128].tolist(), [0,255,0])
     def test_no_point_render_plan_is_saved_with_review_not_required(self):
         with tempfile.TemporaryDirectory() as tmp, patch('comfy_ltx_loop.candidates.encode_previews'):
             plan = new_plan('abc',(64,64),'Hair sway',['auto'],[],1,8,.01,256)

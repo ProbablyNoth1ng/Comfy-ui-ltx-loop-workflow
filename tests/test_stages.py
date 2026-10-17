@@ -9,6 +9,12 @@ from comfy_ltx_loop.staged_comfy import ComfyLTXLoopMotionEditor, ComfyLTXLoopSa
 
 
 class StageTests(unittest.TestCase):
+    def test_strict_render_rejects_direct_no_point_render_with_actionable_message(self):
+        import numpy as np
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        with self.assertRaisesRegex(ValueError, 'Add or enable a moving point, or switch to Free motion'):
+            ComfyLTXLoopMotionEditor().execute(image,'Hair sways','auto',6,24,.01,720,
+                42,'model','manual','{}','render',render_mode='only_pointed_parts')
     def test_qwen2b_choice_preserves_existing_widget_slots_and_defaults(self):
         inputs = ComfyLTXLoopMotionEditor.INPUT_TYPES()['required']
         self.assertEqual(list(inputs), ['image','motion_prompt','requested_parts','duration',

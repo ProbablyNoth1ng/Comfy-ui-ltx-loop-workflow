@@ -8,6 +8,31 @@ from comfy_ltx_loop.motion import (new_plan, parse_landmarks, validate_plan,
 
 
 class MotionTests(unittest.TestCase):
+    def test_strict_mode_requires_mask_for_each_active_moving_point_and_invalidates_review(self):
+        plan = new_plan('abc', (4, 4), 'hair', ['tip'], [
+            {'label':'hair tip','x':.25,'y':.25,'motion_role':'move','body_part':'hair','reason':'sway'},
+            {'label':'head','x':.75,'y':.25,'motion_role':'anchor','body_part':'head','reason':'fixed'},
+        ], duration=1, fps=8, short_side=256)
+        self.assertEqual(plan['render_mode'], 'free_motion')
+        plan['render_mode'] = 'only_pointed_parts'
+        moving = plan['landmarks'][0]['id']
+        with self.assertRaisesRegex(ValueError, 'motion area'):
+            review_plan(plan)
+        plan['motion_areas'] = [{'point_id':moving, 'mask':[
+            [0,0,0,0], [0,255,0,0], [0,0,0,0], [0,0,0,0]]}]
+        reviewed = review_plan(plan)
+        self.assertEqual(reviewed['review']['state'], 'reviewed')
+        reviewed['motion_areas'][0]['mask'][1][1] = 0
+        with self.assertRaisesRegex(ValueError, 'renewed point review'):
+            require_review(reviewed, 'abc', (4,4), 'hair', 1, 8, .01, 256)
+
+    def test_strict_mode_rejects_anchors_disabled_points_and_empty_selection(self):
+        plan = new_plan('abc', (4, 4), 'hair', ['tip'], [
+            {'label':'head','x':.5,'y':.5,'motion_role':'anchor','body_part':'head','reason':'fixed'},
+        ], duration=1, fps=8, short_side=256)
+        plan['render_mode'] = 'only_pointed_parts'
+        with self.assertRaisesRegex(ValueError, 'Add or enable a moving point, or switch to Free motion'):
+            review_plan(plan)
     def test_point_group_switches_filter_four_track_sets_and_preserve_points(self):
         plan = self.plan()
         plan['landmarks'].append({**copy.deepcopy(plan['landmarks'][0]),

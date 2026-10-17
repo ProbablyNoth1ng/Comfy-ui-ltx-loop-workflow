@@ -15,13 +15,14 @@ function node(id,type,pos,inputs,outputs,values,size=[360,240]) {
 }
 const editor=node(10000,'ComfyLTXLoopMotionEditor',[450,0],
     [{name:'image',type:'IMAGE',link:null}],
-    ['IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING'].map((type,i)=>({
-        name:['canvas','tracks','motion_plan','fps','duration','seed','prompt'][i],type,links:[]})),
+    ['IMAGE','STRING','MOTION_PLAN','FLOAT','FLOAT','INT','STRING','IMAGE'].map((type,i)=>({
+        name:['canvas','tracks','motion_plan','fps','duration','seed','prompt','source_image'][i],type,links:[]})),
     ['Gentle hair sway. Stationary camera.','auto',6,24,.01,720,
-     42,'models/Qwen3.5-9B','local Qwen3.5','{}','render',false,'','model','character',true,true],[540,1050]);
+     42,'models/Qwen3.5-9B','local Qwen3.5','{}','render',false,'','model','character',true,true,'free_motion'],[540,1050]);
 const saver=node(4852,'ComfyLTXLoopSaveCandidate',[2200,0],
     [{name:'video',type:'VIDEO',link:null},{name:'motion_plan',type:'MOTION_PLAN',link:null},
-     {name:'seed',type:'INT',widget:{name:'seed'},link:null}],
+     {name:'seed',type:'INT',widget:{name:'seed'},link:null},
+     {name:'source_image',type:'IMAGE',link:null}],
     [{name:'candidate',type:'RENDER_HANDLE',links:[]}],[42],[540,550]);
 graph.nodes=graph.nodes.filter(n=>n.id!==4852);
 const selector=node(10001,'ComfyLTXLoopSavedCandidate',[2200,600],[],
@@ -48,6 +49,7 @@ connect(10000,5,5516,4,'INT');
 connect(5518,0,4852,0,'VIDEO');
 connect(10000,2,4852,1,'MOTION_PLAN');
 connect(10000,5,4852,2,'INT');
+connect(10000,7,4852,3,'IMAGE');
 connect(10001,0,10002,0,'RENDER_HANDLE');
 
 const parameters=graph.nodes.find(n=>n.id===5014);
@@ -79,7 +81,7 @@ for(const n of graph.nodes) {
     if(n.type==='MarkdownNote') {n.pos=[(noteIndex++%4)*600,1200+Math.floor(noteIndex/4)*400];}
 }
 graph.nodes.find(n=>n.id===5527).widgets_values=[
-    '## Comfy LTX Loop\nLoad one image and set character motion text. Render directly when no points are active; Prepare and accept point review only when using points.\n\nBackground motion text guides scenery even without points. Blank text excludes background tracks while keeping saved points. Use the Use character points and Use background points switches to include or exclude each saved group. Choose Model or Manual to prepare points. Visible points filters the editor; New point group controls newly placed points. Circles mark character points and squares mark background points.\n\nRun offers Prepare character points, Prepare background points, Prepare both, Render and Upscale. Each choice queues one stage. Switching a point group requires renewed review before rendering with its points.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results.'];
+    '## Comfy LTX Loop\nLoad one image and choose Free motion (the compatible default) or Only pointed parts. Free motion can Render with no points. Only pointed parts requires reviewed, editable motion areas for enabled moving points and preserves all other saved PNG pixels from the source.\n\nUse Add character point or Add background point to place a point directly in that group. Background motion text guides scenery. Circles mark character points and squares mark background points.\n\nRun offers Prepare character points, Prepare background points, Prepare both, Render and Upscale. Each choice queues one stage.\n\nRender uses the official LTX-2.5 pipeline with a stationary camera. Small generation drift may remain. Inspect continuous and seam previews. Finish the same saved candidate again with Fast, Balanced AI, or Original AI to compare results.'];
 graph.groups=[];
 graph.last_node_id=10002;graph.last_link_id=next-1;
 graph.extra={comfy_ltx_loop:{schema:1,official_sha256:crypto.createHash('sha256').update(fs.readFileSync(official)).digest('hex'),

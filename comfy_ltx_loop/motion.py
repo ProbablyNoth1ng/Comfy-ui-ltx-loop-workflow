@@ -7,7 +7,9 @@ import math
 
 def plan_fingerprint(plan):
     data = {'landmarks': plan['landmarks'],
-            'strength_reference': plan.get('review', {}).get('strength_reference')}
+            'strength_reference': plan.get('review', {}).get('strength_reference'),
+            'render_mode': plan.get('render_mode', 'free_motion'),
+            'motion_areas': plan.get('motion_areas', [])}
     if 'background' in plan:
         data['background'] = plan['background']
     for key in ('use_character_points', 'use_background_points'):
@@ -60,6 +62,7 @@ def new_plan(identity, size, prompt, requested, landmarks, duration=6, fps=24,
             'duration': float(duration), 'fps': int(fps), 'strength': float(strength),
             'short_side': int(short_side), 'frames': frame_count(duration, fps),
             'transform': canvas_transform(size, short_side), 'landmarks': [],
+            'render_mode': 'free_motion', 'motion_areas': [],
             'review': {'state': 'pending'}, 'feedback': feedback or []}
     if analysis is not None:
         plan['analysis'] = copy.deepcopy(analysis)
@@ -67,7 +70,10 @@ def new_plan(identity, size, prompt, requested, landmarks, duration=6, fps=24,
         fixed = (point['motion_role'] == 'anchor' if 'motion_role' in point else
                  any(word in point['label'].lower() for word in ('root', 'head', 'shoulder')))
         amplitude = 0 if fixed else min(strength, 1-point['x'])
-        plan['landmarks'].append({**point, 'enabled': True, 'strength': 1.,
+        stable = point.get('id') or ('point-'+hashlib.sha256(
+            json.dumps([point.get('label'), point.get('x'), point.get('y')],
+                       separators=(',', ':')).encode()).hexdigest()[:16])
+        plan['landmarks'].append({**point, 'id': stable, 'enabled': True, 'strength': 1.,
                                   'path': returning_path(point['x'], point['y'], amplitude)})
     validate_plan(plan)
     return plan
@@ -96,6 +102,12 @@ def validate_plan(plan):
         raise ValueError('Recorded image transform changed; prepare and review again')
     if not 0 <= plan['strength'] <= .1 or not isinstance(plan['landmarks'], list):
         raise ValueError('Invalid motion strength or landmark list')
+    plan.setdefault('render_mode', 'free_motion')
+    plan.setdefault('motion_areas', [])
+    if plan['render_mode'] not in ('free_motion', 'only_pointed_parts'):
+        raise ValueError('Invalid render mode')
+    if not isinstance(plan['motion_areas'], list):
+        raise ValueError('Invalid motion areas')
     if any(not isinstance(plan[key], bool) for key in ('use_character_points', 'use_background_points')
            if key in plan):
         raise ValueError('Invalid point group selection')
@@ -105,13 +117,20 @@ def validate_plan(plan):
             not isinstance(background.get('prompt'), str) or
             background.get('preparation') not in ('model', 'manual')):
         raise ValueError('Invalid background settings')
-    for point in plan['landmarks']:
+    ids = set()
+    for index, point in enumerate(plan['landmarks']):
         if point.get('group', 'character') not in ('character', 'background'):
             raise ValueError('Invalid landmark group')
         if any(field in point for field in ('motion_role', 'body_part', 'reason')):
             validate_semantics(point)
         if not isinstance(point.get('label'), str) or not point['label'].strip():
             raise ValueError('Every landmark needs a label')
+        point.setdefault('id', 'point-'+hashlib.sha256(json.dumps(
+            [point['label'], point.get('x'), point.get('y'), index], separators=(',', ':')).encode()
+        ).hexdigest()[:16])
+        if not isinstance(point['id'], str) or not point['id']:
+            raise ValueError('Every landmark needs a stable unique id')
+        ids.add(point['id'])
         coordinate(point['x']); coordinate(point['y'])
         if not isinstance(point.get('enabled'), bool) or not 0 <= point['strength'] <= 2:
             raise ValueError('Invalid point enabled state or strength')
@@ -132,6 +151,15 @@ def validate_plan(plan):
         if any(abs(path[0][axis]-point[axis]) > 1e-8 or
                abs(path[-1][axis]-point[axis]) > 1e-8 for axis in ('x','y')):
             raise ValueError('Returning paths must start and end at their landmark')
+    for area in plan['motion_areas']:
+        if not isinstance(area, dict) or area.get('point_id') not in ids:
+            raise ValueError('Invalid motion area')
+        mask = area.get('mask')
+        if not isinstance(mask, list) or len(mask) != plan['source_size'][1] or any(
+                not isinstance(row, list) or len(row) != plan['source_size'][0] or any(
+                    isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 255
+                    for value in row) for row in mask):
+            raise ValueError('Invalid motion area mask')
     return plan
 
 
@@ -144,9 +172,47 @@ def active_point(plan, point):
     return plan.get('use_character_points', True)
 
 
+def active_moving_point(plan, point):
+    """A strict area can be granted only by an enabled non-stationary active point."""
+    return active_point(plan, point) and (point.get('motion_role') == 'move' or
+        (point.get('motion_role') is None and any(
+            abs(key[axis]-point[axis]) > 1e-8 for key in point['path'] for axis in ('x', 'y'))))
+
+
+def strict_mask(plan):
+    """Union source-coordinate areas authorized by currently moving points."""
+    validate_plan(plan)
+    width, height = plan['source_size']
+    result = [[0] * width for _ in range(height)]
+    allowed = {point['id'] for point in plan['landmarks'] if active_moving_point(plan, point)}
+    for area in plan.get('motion_areas', []):
+        if area['point_id'] in allowed:
+            for y, row in enumerate(area['mask']):
+                for x, value in enumerate(row):
+                    result[y][x] = max(result[y][x], value)
+    return result
+
+
+def check_motion_areas(plan):
+    if plan.get('render_mode', 'free_motion') != 'only_pointed_parts':
+        return
+    active = {point['id'] for point in plan['landmarks'] if active_moving_point(plan, point)}
+    if len(active) != sum(active_moving_point(plan, point) for point in plan['landmarks']):
+        raise ValueError('Update motion areas after assigning unique point ids')
+    if not active:
+        raise ValueError('Add or enable a moving point, or switch to Free motion')
+    areas = {area['point_id'] for area in plan.get('motion_areas', [])}
+    if not active <= areas or any(area_id not in active for area_id in areas):
+        raise ValueError('Update motion areas for every enabled moving point before review')
+    if not any(value for row in strict_mask(plan) for value in row):
+        raise ValueError('Motion areas must contain an approved pixel before review')
+
+
 def review_plan(plan):
     plan = copy.deepcopy(validate_plan(plan))
-    if not any(active_point(plan, p) for p in plan['landmarks']):
+    if plan.get('render_mode') == 'only_pointed_parts':
+        check_motion_areas(plan)
+    elif not any(active_point(plan, p) for p in plan['landmarks']):
         raise ValueError('Add or enable at least one landmark before review')
     check_preparation(plan)
     plan['review'] = {'state': 'reviewed', 'strength_reference': plan['strength']}
@@ -221,6 +287,7 @@ def require_review(plan, identity, size, prompt, duration, fps, strength, short_
         review['fingerprint'] = plan_fingerprint(plan)
     elif review.get('fingerprint') != plan_fingerprint(plan):
         raise ValueError('Points changed; renewed point review required')
+    check_motion_areas(plan)
     plan.update(source_id=identity, source_size=list(size), prompt=prompt,
                 duration=float(duration), fps=int(fps), strength=float(strength),
                 short_side=int(short_side), frames=frame_count(duration, fps),

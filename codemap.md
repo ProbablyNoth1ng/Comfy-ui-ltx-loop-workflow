@@ -11,6 +11,7 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 | Product intent and accepted behavior | `docs/product-spec.md` | `docs/superpowers/specs/2026-10-09-comfy-ltx-loop-rebrand-design.md`, baseline and render designs |
 | Development workflow and new specs | `AGENTS.md`, `docs/superpowers/README.md` | Workflow design and plan under `docs/superpowers/` |
 | Motion plans, roles, groups, review, timing and canvas mapping | `comfy_ltx_loop/motion.py` | `tests/test_motion.py`, `tests/test_semantic_points.py` |
+| Strict render modes, point-linked source masks and protected-pixel compositing | `comfy_ltx_loop/motion.py`, `comfy_ltx_loop/candidates.py` | `tests/test_motion.py`, `tests/test_candidates.py` |
 | Optional point-group selection and direct Render | `comfy_ltx_loop/motion.py`, `staged_comfy.py`, editor web module | `tests/test_motion.py`, `tests/test_stages.py`, `tests/test_editor_semantics.mjs` |
 | Automatic character/background point proposals and model cleanup | `comfy_ltx_loop/vision.py` | `tests/test_vision.py` |
 | Prepare/Render/Upscale backend node interfaces | `comfy_ltx_loop/staged_comfy.py` | `tests/test_stages.py` |
@@ -30,6 +31,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 - `docs/superpowers/specs/2026-10-17-qwen2b-points-design.md` and
   `docs/superpowers/plans/2026-10-17-qwen2b-points.md`: selectable 2B proposals,
   additive pinned cloud snapshot and verification.
+- `docs/superpowers/specs/2026-10-17-strict-motion-areas-design.md` and
+  `docs/superpowers/plans/2026-10-17-strict-motion-areas.md`: strict point areas,
+  source-backed candidate persistence and protected PNG finishing.
 - `docs/superpowers/specs/2026-10-08-exact-16x9-render-design.md`: near-16:9
   crop contract, Pillow compatibility research and verification boundary.
 - `docs/superpowers/plans/2026-10-08-exact-16x9-render.md`: test-first
@@ -108,7 +112,8 @@ anime-loop-research/
 │       │   ├── 2026-10-08-project-workflow.md
 │       │   ├── 2026-10-09-comfy-ltx-loop-rebrand.md
 │       │   ├── 2026-10-16-optional-points.md
-│       │   └── 2026-10-17-qwen2b-points.md
+│       │   ├── 2026-10-17-qwen2b-points.md
+│       │   └── 2026-10-17-strict-motion-areas.md
 │       └── specs/
 │           ├── 2026-10-08-comfy-ltx-loop-baseline-design.md
 │           ├── 2026-10-08-exact-16x9-render-design.md
@@ -116,7 +121,8 @@ anime-loop-research/
 │           ├── 2026-10-08-project-workflow-design.md
 │           ├── 2026-10-09-comfy-ltx-loop-rebrand-design.md
 │           ├── 2026-10-16-optional-points-design.md
-│           └── 2026-10-17-qwen2b-points-design.md
+│           ├── 2026-10-17-qwen2b-points-design.md
+│           └── 2026-10-17-strict-motion-areas-design.md
 ├── evidence/
 │   ├── comfy-local-validation.json   Historical local validation record
 │   ├── flf.json                      Reference workflow evidence

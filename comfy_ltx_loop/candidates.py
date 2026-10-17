@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .motion import validate_plan, plan_fingerprint, active_point
+from .motion import validate_plan, plan_fingerprint, active_point, strict_mask
 from .project import atomic_json, sha
 
 
@@ -105,7 +105,39 @@ def save_record(out, record):
     return record
 
 
-def save_candidate(images, plan, seed, root, settings):
+def protected_reference(plan, source, size):
+    """Map the fixed original and approved source mask into saved-frame space."""
+    pixels = np.asarray(source)
+    if pixels.shape[:2] != tuple(reversed(plan['source_size'])):
+        raise ValueError('Source reference dimensions differ from the reviewed source image')
+    image = Image.fromarray(pixels[:,:,:3].astype(np.uint8)).resize(
+        output_size(plan['source_size'], min(size)), Image.Resampling.LANCZOS)
+    mask = Image.fromarray(np.asarray(strict_mask(plan), dtype=np.uint8)).resize(
+        image.size, Image.Resampling.NEAREST)
+    return crop_exact_widescreen(image), crop_exact_widescreen(mask)
+
+
+def protect_image(image, reference, mask):
+    """Keep zero-mask pixels byte-identical to the fixed source reference."""
+    if image.size != reference.size or image.size != mask.size:
+        raise ValueError('Protection reference dimensions differ from generated frame')
+    return Image.composite(image.convert('RGB'), reference.convert('RGB'), mask)
+
+
+def protect_finished_frames(out, handle, target):
+    source = Path(handle['directory'])/'source-reference.png'
+    mask = Path(handle['directory'])/'approved-motion-mask.png'
+    if not source.is_file() or not mask.is_file():
+        raise ValueError('Strict candidate is missing its source protection artifacts')
+    with Image.open(source) as reference, Image.open(mask) as approved:
+        reference = crop_exact_widescreen(reference.convert('RGB')).resize(target, Image.Resampling.LANCZOS)
+        approved = crop_exact_widescreen(approved.convert('L')).resize(target, Image.Resampling.NEAREST)
+        for frame_path in sorted((out/'frames').glob('*.png')):
+            with Image.open(frame_path) as frame:
+                protect_image(frame, reference, approved).save(frame_path)
+
+
+def save_candidate(images, plan, seed, root, settings, source=None):
     validate_plan(plan)
     no_review_needed = (plan.get('review',{}).get('state') == 'not_required' and
                         not any(active_point(plan, point) for point in plan['landmarks']))
@@ -120,6 +152,13 @@ def save_candidate(images, plan, seed, root, settings):
     (out/'raw').mkdir()
     x,y,w,h = plan['transform']['content']
     size = exact_widescreen_size(output_size(plan['source_size'],min(w,h)))
+    reference = mask = None
+    if plan.get('render_mode') == 'only_pointed_parts':
+        if source is None:
+            raise ValueError('Strict Render requires the original source image for protected pixels')
+        reference, mask = protected_reference(plan, source, size)
+        reference.save(out/'source-reference.png')
+        mask.save(out/'approved-motion-mask.png')
     first = last = None
     for index in range(len(images)):
         value = images[index]
@@ -135,6 +174,8 @@ def save_candidate(images, plan, seed, root, settings):
         image = image.crop((x,y,x+w,y+h)).resize(
             output_size(plan['source_size'],min(w,h)),Image.Resampling.LANCZOS)
         image = crop_exact_widescreen(image)
+        if reference is not None:
+            image = protect_image(image, reference, mask)
         pixels = np.asarray(image,dtype=np.float32)
         if first is None:
             first = pixels
@@ -231,6 +272,8 @@ def finish_candidate(handle, root, resolution, chunk_size=4, enhancer=None, meth
             close = getattr(enhancer,'close',None)
             if close:
                 close()
+    if handle.get('motion_plan', {}).get('render_mode') == 'only_pointed_parts':
+        protect_finished_frames(out, handle, target)
     record = save_record(out, {'kind':'finish','parent':handle['record'],
         'dimensions':list(target),'fps':handle['fps'],'frame_count':handle['frame_count'],
         'seed':handle['seed'],'generation_settings':handle['generation_settings'],

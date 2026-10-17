@@ -20,6 +20,8 @@ for the required workflow.
 | [Optional points plan](plans/2026-10-16-optional-points.md) | Test-first implementation and verification ledger |
 | [Lightweight Qwen proposals](specs/2026-10-17-qwen2b-points-design.md) | Selectable 2B proposals and additive pinned installation |
 | [Lightweight Qwen plan](plans/2026-10-17-qwen2b-points.md) | Test-first implementation and verification ledger |
+| [Strict motion areas design](specs/2026-10-17-strict-motion-areas-design.md) | Free/strict render behavior and source-pixel protection |
+| [Strict motion areas plan](plans/2026-10-17-strict-motion-areas.md) | Strict-area implementation ledger |
 
 ## Existing implementation history
 

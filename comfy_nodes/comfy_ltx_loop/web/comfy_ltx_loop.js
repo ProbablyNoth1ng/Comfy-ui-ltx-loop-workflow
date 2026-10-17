@@ -146,12 +146,15 @@ function checkSettings(node) {
     const value=name=>widget(node,name)?.value;
     const useCharacter=value('use_character_points')!==false;
     const useBackground=value('use_background_points')!==false;
+    const renderMode=value('render_mode')??'free_motion';
     const backgroundEnabled=String(value('background_prompt')??'').trim().length>0;
     const active=point=>point.enabled&&(point.group==='background'
         ?useBackground&&backgroundEnabled:useCharacter);
     if(!p.landmarks?.some(active))return null;
     if((p.use_character_points??true)!==useCharacter||(p.use_background_points??true)!==useBackground)
         throw new Error('Point group selection changed; review points again.');
+    if((p.render_mode??'free_motion')!==renderMode)
+        throw new Error('Render mode changed; review points again.');
     const requested=String(value('requested_parts')).split(',').map(s=>s.trim()).filter(Boolean);
     const characterActive=p.landmarks.some(point=>active(point)&&point.group!=='background');
     const backgroundActive=p.landmarks.some(point=>active(point)&&point.group==='background');
@@ -227,15 +230,14 @@ function editor(node) {
             p[name]=control.checked;save(p);selection(p);
         };
     }
+    const renderMode=widget(node,'render_mode');
+    if(renderMode)renderMode.label='Render mode';
     const canvas=element('canvas',root);canvas.width=480;canvas.height=300;
     Object.assign(canvas.style,{width:'100%',height:'300px',objectFit:'contain',touchAction:'none',background:'#080a0f'});
-    const groupControl=element('select',root);groupControl.title='New point group';
-    for(const choice of ['character','background']){const option=element('option',groupControl,choice);option.value=choice;}
     const visibilityControl=element('select',root);visibilityControl.title='Visible points';
     for(const [value,label] of [['character','Character'],['background','Background'],['all','All']]){
         const option=element('option',visibilityControl,label);option.value=value;
     }
-    groupControl.value=node.properties.comfy_ltx_loop_new_point_group??'character';
     visibilityControl.value=node.properties.comfy_ltx_loop_visible_points??'all';
     const pointList=element('div',root);
     pointList.setAttribute('aria-label','Landmarks');
@@ -301,7 +303,6 @@ function editor(node) {
         if(!control)continue;const changed=control.callback;
         control.callback=function(){changed?.apply(this,arguments);saveBackground();};
     }
-    groupControl.onchange=()=>{(node.properties??={}).comfy_ltx_loop_new_point_group=groupControl.value;app.graph.setDirtyCanvas(true,true);};
     visibilityControl.onchange=()=>{(node.properties??={}).comfy_ltx_loop_visible_points=visibilityControl.value;selected=-1;drag=null;selection(plan());draw();app.graph.setDirtyCanvas(true,true);};
     function persist(p) {
         app.graph.extra??={};
@@ -320,7 +321,7 @@ function editor(node) {
         }
     }
     populateModelPath();
-    for(const name of ['preparation','vision_model','requested_parts','motion_prompt','duration','fps','strength','short_side']) {
+    for(const name of ['preparation','vision_model','requested_parts','motion_prompt','duration','fps','strength','short_side','render_mode']) {
         const control=widget(node,name);if(!control)continue;
         const changed=control.callback;
         control.callback=function(){changed?.apply(this,arguments);
@@ -386,7 +387,7 @@ function editor(node) {
           const section=element('div',pointList);section.setAttribute('aria-label',`${name} points`);
           element('strong',section,name==='character'?'Character':'Background');
           const listed=points.entries().filter(([,point])=>group(point)===name);
-          if(!listed.length)element('p',section,`No ${name} points. Choose ${name} as New point group, then click Add point.`);
+          if(!listed.length)element('p',section,`No ${name} points. Use Add ${name} point to place one.`);
           for(const [index,point] of listed) {
             const row=button(section,`${index+1}. ${point.label} · ${pointRole(point)} (${point.x.toFixed(3)}, ${point.y.toFixed(3)}) · ${point.enabled?'enabled':'disabled'}`,()=>{
                 selected=index;selection(plan());draw();
@@ -462,7 +463,7 @@ function editor(node) {
         if(adding) {
             const moving=role.value!=='anchor';
             const path=returningPath(where,moving);
-            p.landmarks.push({...where,group:groupControl.value,label:label.value||`point ${p.landmarks.length+1}`,enabled:true,strength:1,path,
+            p.landmarks.push({...where,group:adding,label:label.value||`point ${p.landmarks.length+1}`,enabled:true,strength:1,path,
                 motion_role:moving?'move':'anchor',body_part:bodyPart.value||'manual',reason:reason.value||'Manual point placement'});
             selected=p.landmarks.length-1;adding=false;selection(p);save(p);return;
         }
@@ -509,7 +510,12 @@ function editor(node) {
     };
     bodyPart.oninput=bodyPart.onchange;reason.oninput=reason.onchange;
     timeline.oninput=draw;
-    button(tools,'Add point',()=>{adding=true;status.textContent='Click the image to add a labeled point.';});
+    function addPoint(group) {
+        adding=group;visibilityControl.value=group;renderList();
+        status.textContent=`Click the image to add a ${group} point.`;
+    }
+    button(tools,'Add character point',()=>addPoint('character'));
+    button(tools,'Add background point',()=>addPoint('background'));
     button(tools,'Delete',()=>{const p=plan();if(selected<0)return;p.landmarks.splice(selected,1);selected=-1;save(p);selection(p);});
     button(tools,'Play paths',()=>{
         if(timer){clearInterval(timer);timer=null;return;}
