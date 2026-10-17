@@ -18,7 +18,10 @@ see [automatic installation](docs/runpod-autoinstall.md).
 
 1. Load one anime image. Set the motion prompt and requested parts (`auto` by
    default, or a comma-separated list) in **Prepare and review**. Choose
-   **local Qwen3.5**, **local Qwen** (Qwen3-VL), or **manual** preparation.
+   **local Qwen3.5** (default), **local Qwen** (Qwen3-VL 8B),
+   **local Qwen3-VL 2B**, or **manual** preparation. Automatic setup installs
+   2B alongside the selected larger model; changing models requires preparing
+   affected points and accepting review again.
 2. Click **Prepare character points**. Local Qwen proposes normalized character landmarks and
    unloads before generation. Failed analysis leaves the editor available with
    feedback; add points manually or retry.
@@ -114,4 +117,5 @@ Sources: [LTX Motion Control](https://docs.ltx.io/open-source-model/feature-guid
 [Motion Track IC-LoRA model card](https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control),
 [Qwen3-VL](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct),
 [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B),
+[Qwen3-VL-2B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct),
 [Real-ESRGAN anime model](https://github.com/xinntao/Real-ESRGAN/blob/master/docs/anime_video_model.md).

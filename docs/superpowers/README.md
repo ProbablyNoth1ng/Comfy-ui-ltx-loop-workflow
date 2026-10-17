@@ -18,6 +18,8 @@ for the required workflow.
 | [Comfy LTX Loop rebrand plan](plans/2026-10-09-comfy-ltx-loop-rebrand.md) | Rebrand delivery and verification ledger |
 | [Optional points design](specs/2026-10-16-optional-points-design.md) | Group switches and direct Render without point review |
 | [Optional points plan](plans/2026-10-16-optional-points.md) | Test-first implementation and verification ledger |
+| [Lightweight Qwen proposals](specs/2026-10-17-qwen2b-points-design.md) | Selectable 2B proposals and additive pinned installation |
+| [Lightweight Qwen plan](plans/2026-10-17-qwen2b-points.md) | Test-first implementation and verification ledger |
 
 ## Existing implementation history
 

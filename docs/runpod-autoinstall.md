@@ -65,7 +65,7 @@ The extracted image launcher is covered by local regression tests.
 | `COMFY_LTX_LOOP_REPO` | Optional repository URL; defaults to the URL above |
 | `COMFY_LTX_LOOP_REVISION` | Optional Git branch/tag/commit, used on first clone |
 | `LTX_REVISION` | Optional LTX Git branch/tag/commit, used on first clone |
-| `COMFY_LTX_LOOP_VISION_MODEL` | `Qwen/Qwen3.5-9B` for new installs, or `Qwen/Qwen3-VL-8B-Instruct`; existing installs retain their choice when unset |
+| `COMFY_LTX_LOOP_VISION_MODEL` | Larger model: `Qwen/Qwen3.5-9B` for new installs, or `Qwen/Qwen3-VL-8B-Instruct`; existing installs retain their choice when unset. Qwen3-VL-2B-Instruct is installed alongside either choice. |
 | `HF_TOKEN` | Hugging Face token with read access to the required models |
 | `JUPYTER_PASSWORD` | Your JupyterLab token/password |
 | `FILEBROWSER_PASSWORD` | Your FileBrowser password if exposing port 8080 |
@@ -86,7 +86,8 @@ in the generated command. Your current public GitHub repository needs no token.
   image's installed versions. Install ffmpeg if missing.
 - Connect the Comfy LTX Loop custom nodes.
 - Download the six exact model files declared by the official Motion Track
-  workflow, the selected Qwen snapshot including configs/tokenizer/weights,
+  workflow, the selected larger Qwen snapshot and Qwen3-VL-2B-Instruct
+  (each including configs/tokenizer/weights),
   and Real-ESRGAN's `realesr-animevideov3.pth`.
 - Resolve Hugging Face models to immutable commits before downloads, check free
   disk space, file sizes and available source SHA256 hashes, and validate the
@@ -113,7 +114,12 @@ The vision selection participates in download-cache identity. Switching to
 Qwen3.5 retains installed Qwen3-VL files for comparison. Download manifests
 record immutable HF revisions and file checksums; no vision weights download
 during Prepare.
-Legacy manifests migrate with their existing pinned revisions. Per-model ready
+Legacy manifests migrate with their existing pinned revisions. The additional
+2B snapshot is installed even when the larger model is already cached; it has
+its own `vision-Qwen3-VL-2B-Instruct-plan.json` and
+`vision-Qwen3-VL-2B-Instruct.json`. Complete 2B files are reused when switching
+the larger selection. Choose **local Qwen3-VL 2B** in the editor for any Prepare
+action, then review its suggestions before rendering. Per-model ready
 manifests and `vision-*.json` provenance live in `.comfy-ltx-loop-install/`, so
 switching back to an installed snapshot reuses its recorded revision. Newly
 copied workflows match the selected analyzer; saved workflows remain unchanged.

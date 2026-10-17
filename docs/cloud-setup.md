@@ -58,15 +58,24 @@ ComfyUI directories. Accept Hugging Face access terms first using your account.
 Keep the same BF16 distilled transformer, Gemma 4 encoder/enhancer, video/audio
 VAEs and Motion Track IC-LoRA files for baseline and adapted validation.
 
-New automatic installations default to a Qwen3.5-9B snapshot in
-`$COMFY_ROOT/models/Qwen3.5-9B`. Qwen3-VL-8B-Instruct remains supported in
+Automatic installation downloads Qwen3-VL-2B-Instruct into
+`$COMFY_ROOT/models/Qwen3-VL-2B-Instruct` alongside the selected larger model.
+New installations default to Qwen3.5-9B in `$COMFY_ROOT/models/Qwen3.5-9B`.
+Qwen3-VL-8B-Instruct remains supported in
 `$COMFY_ROOT/models/Qwen3-VL-8B-Instruct`; existing installations retain their
-selection. Both require configs, tokenizer and weights, plus
+larger-model selection. All require configs, tokenizer and weights, plus
 `transformers>=5.2,<6`. Set `COMFY_LTX_LOOP_VISION_MODEL=Qwen/Qwen3-VL-8B-Instruct`
 or pass `cloud/install.py --vision-model Qwen/Qwen3-VL-8B-Instruct` to select it.
-Record its immutable revision and SHA256 files. Set the editor's `vision_model`
+Choose **local Qwen3-VL 2B** in the editor to use the smaller model for Prepare
+character, background or both. It keeps the same point rules and review step;
+its memory use and placement quality still need host qualification.
+Each snapshot has its own immutable revision and SHA256 manifest under
+`$COMFY_ROOT/.comfy-ltx-loop-install/`. Setup reuses complete snapshots and
+recovers interrupted/missing files from their pinned plans on retry.
+Set the editor's `vision_model`
 to that absolute path or use the populated relative path. Switching preparation
 updates bundled model paths; custom paths and saved widget positions are retained.
+Changed models require preparing affected groups and accepting review again.
 The loader dispatches from the local snapshot's configuration and disables
 Qwen3.5 thinking for structured JSON. Prepare uses `local_files_only=True`; it never calls a
 hosted service or downloads weights during creative work. Missing weights give

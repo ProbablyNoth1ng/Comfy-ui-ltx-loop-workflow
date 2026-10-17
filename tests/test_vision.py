@@ -84,8 +84,9 @@ class VisionTests(unittest.TestCase):
             self.assertIn('Hair sway. Face stays still.', instruction)
 
     def test_load_and_generation_failures_release_model_before_cuda_cleanup(self):
-        for failure in ('load','generate','chained'):
-            self.run_analysis('qwen3_5', failure)
+        for family in ('qwen3_vl','qwen3_5'):
+            for failure in ('load','generate','chained'):
+                self.run_analysis(family, failure)
 
     def test_background_target_requests_environmental_motion_and_anchors(self):
         _, templates = self.run_analysis('qwen3_5',target='background')

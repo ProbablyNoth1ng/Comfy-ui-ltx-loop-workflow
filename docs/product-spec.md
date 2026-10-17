@@ -1,6 +1,6 @@
 # Comfy LTX Loop product specification
 
-Updated: 2026-10-16.
+Updated: 2026-10-17.
 
 This is the living product agreement for the owner. Technical designs and task
 plans are indexed in [Superpowers documents](superpowers/README.md).
@@ -34,6 +34,7 @@ does not guarantee them. Real anime and GPU qualification is still pending.
 | P-12 | After Render, finish any saved candidate again with Fast (FFmpeg Lanczos), Balanced AI (installed anime weights in supported FP16 with adaptive tiles), or Original AI (existing Real-ESRGAN path). New workflows default to Fast at 1080p; existing Upscale nodes retain Original AI and 1440p defaults. Every finish keeps frame count, FPS, silent MP4, lossless frames, aspect/crop rules and the candidate unchanged, with its method recorded. | Implemented in source; Python, installed ComfyUI, GPU speed and visual verification pending |
 | P-13 | Use only the Comfy LTX Loop public identity: `comfy-ltx-loop` for commands and hyphenated paths, `comfy_ltx_loop` for Python/import paths, `ComfyLTXLoop…` for node types, and `Comfy LTX Loop` for display text. Previous names, commands, saved workflows, records, routes, output paths and environment variables are intentionally unsupported. | Implemented locally; deployment/GPU qualification unchanged and pending |
 | P-14 | Choose independently whether character and background points guide the next Render. Switching a group off preserves its points; older workflows start with both groups on. Render accepts either group, both or no active points. With no active points, load an image, set character and optional background motion text, and Render directly without Prepare, Qwen or point review. Text still guides motion; a saved candidate records that point review was unnecessary. Re-enabling points requires renewed review and only active groups require current preparation. | Implemented in source; installed ComfyUI and visual qualification pending |
+| P-15 | Choose local Qwen3-VL 2B for character, background or combined point preparation. It uses the existing point instructions, including the character 16–24 useful visible point guideline, manual correction and explicit review. Changing models makes affected preparation and review stale. Automatic installation adds 2B alongside the selected larger model: existing installations keep their choice; new ones still default to Qwen3.5-9B. Saved workflows, widget order and the official LTX baseline remain compatible. | Implemented locally; GPU memory, real point quality and deployed ComfyUI checks pending |
 
 "Implemented" describes repository behavior and existing evidence. It does not
 mean this session reran all tests or that a production GPU run was accepted.
@@ -78,6 +79,12 @@ behavioral test first, implement code to make it green, then refactor and verify
 Update [codemap.md](../codemap.md) whenever project structure changes.
 
 ## Delivery notes
+
+- 2026-10-17: P-15 adds a lightweight point proposal choice and a separately pinned
+  automatic-install snapshot, including recovery of truncated Hub cache files.
+  Local regressions and independent code review completed; GPU memory, model
+  accuracy and deployed ComfyUI checks remain pending. See the [2B design](superpowers/specs/2026-10-17-qwen2b-points-design.md)
+  and [implementation plan](superpowers/plans/2026-10-17-qwen2b-points.md).
 
 - 2026-10-16: P-14 adds optional character/background track groups and direct
   text-guided Render without active points. Local Python and Node tests passed;

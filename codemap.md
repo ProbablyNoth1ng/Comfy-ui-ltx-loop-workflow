@@ -1,6 +1,6 @@
 # Comfy LTX Loop code map
 
-Updated: 2026-10-16. Read this before locating code. Update it in the same change
+Updated: 2026-10-17. Read this before locating code. Update it in the same change
 whenever files/directories are added, deleted, renamed or moved, or module ownership
 changes. Confirm details against source; this is navigation, not a substitute for code.
 
@@ -27,6 +27,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 
 ## Current change documents
 
+- `docs/superpowers/specs/2026-10-17-qwen2b-points-design.md` and
+  `docs/superpowers/plans/2026-10-17-qwen2b-points.md`: selectable 2B proposals,
+  additive pinned cloud snapshot and verification.
 - `docs/superpowers/specs/2026-10-08-exact-16x9-render-design.md`: near-16:9
   crop contract, Pillow compatibility research and verification boundary.
 - `docs/superpowers/plans/2026-10-08-exact-16x9-render.md`: test-first
@@ -104,14 +107,16 @@ anime-loop-research/
 │       │   ├── 2026-10-08-faster-finishing.md
 │       │   ├── 2026-10-08-project-workflow.md
 │       │   ├── 2026-10-09-comfy-ltx-loop-rebrand.md
-│       │   └── 2026-10-16-optional-points.md
+│       │   ├── 2026-10-16-optional-points.md
+│       │   └── 2026-10-17-qwen2b-points.md
 │       └── specs/
 │           ├── 2026-10-08-comfy-ltx-loop-baseline-design.md
 │           ├── 2026-10-08-exact-16x9-render-design.md
 │           ├── 2026-10-08-faster-finishing-design.md
 │           ├── 2026-10-08-project-workflow-design.md
 │           ├── 2026-10-09-comfy-ltx-loop-rebrand-design.md
-│           └── 2026-10-16-optional-points-design.md
+│           ├── 2026-10-16-optional-points-design.md
+│           └── 2026-10-17-qwen2b-points-design.md
 ├── evidence/
 │   ├── comfy-local-validation.json   Historical local validation record
 │   ├── flf.json                      Reference workflow evidence

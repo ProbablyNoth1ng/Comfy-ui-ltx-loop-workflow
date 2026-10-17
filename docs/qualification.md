@@ -4,6 +4,20 @@ Status: **pending**. No provider instance was available. Local CPU tests do not
 prove LTX inference, Qwen anime landmark accuracy, Spandrel weight compatibility
 or ComfyUI browser behavior on a provider.
 
+## 2026-10-17 lightweight Qwen point proposals
+
+Local regression tests exercise the 2B selection for character, background and
+combined preparation, review invalidation, saved/custom paths, additive model
+installation, independent pinned manifests, cache reuse and interrupted/missing
+snapshot recovery. Hub and model inference boundaries use doubles. No 2B weights
+were downloaded or run here. The final full suites passed 107 Python and 42 Node
+tests, and document/inventory/diff checks passed. On a configured host, verify all three Prepare
+actions, real point placement against the source, manual correction and renewed
+review, model unload before Render, actual GPU memory use and installed ComfyUI
+save/reopen and conversion. Compare 2B with the installation's larger model using
+the same source/instructions; capture both per-model manifests and stage evidence.
+The official LTX baseline remains unchanged and still requires qualification.
+
 ## 2026-10-16 optional points implementation
 
 Local tests cover direct Render with `[]`, no Qwen call, text guidance, selective

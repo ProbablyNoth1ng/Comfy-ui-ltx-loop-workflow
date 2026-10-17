@@ -309,10 +309,14 @@ function editor(node) {
         app.graph.extra.comfy_ltx_loop_motion_plans[String(node.id)]=p;
     }
     const preparation=widget(node,'preparation'),modelPath=widget(node,'vision_model');
-    const bundledPaths=['models/Qwen3-VL-8B-Instruct','models/Qwen3.5-9B'];
+    const bundledPaths={
+        'local Qwen':'models/Qwen3-VL-8B-Instruct',
+        'local Qwen3.5':'models/Qwen3.5-9B',
+        'local Qwen3-VL 2B':'models/Qwen3-VL-2B-Instruct',
+    };
     function populateModelPath() {
-        if(bundledPaths.includes(modelPath.value) && preparation.value!=='manual') {
-            modelPath.value=preparation.value==='local Qwen3.5'?bundledPaths[1]:bundledPaths[0];
+        if(Object.values(bundledPaths).includes(modelPath.value) && bundledPaths[preparation.value]) {
+            modelPath.value=bundledPaths[preparation.value];
         }
     }
     populateModelPath();

@@ -58,7 +58,7 @@ class ComfyLTXLoopMotionEditor:
             'short_side':('INT',{'default':720,'min':256,'max':2160,'step':8}),
             'seed':('INT',{'default':42,'min':0,'max':2**63-1,'control_after_generate':False}),
             'vision_model':('STRING',{'default':'models/Qwen3.5-9B'}),
-            'preparation':(['local Qwen','manual','local Qwen3.5'],{'default':'local Qwen3.5'}),
+            'preparation':(['local Qwen','manual','local Qwen3.5','local Qwen3-VL 2B'],{'default':'local Qwen3.5'}),
             'plan_json':('STRING',{'default':'{}','multiline':True}),
             'stage':(['render','prepare'],)},
             'optional':{
@@ -111,7 +111,7 @@ class ComfyLTXLoopMotionEditor:
                 failed = False
                 mode = preparation if target == 'character' else background_preparation
                 current_prompt = motion_prompt if target == 'character' else background_prompt
-                if mode in ('local Qwen','local Qwen3.5','model'):
+                if mode in ('local Qwen','local Qwen3.5','local Qwen3-VL 2B','model'):
                     try:
                         if target == 'background':
                             points = analyze(source,current_prompt,['auto'],vision_model,feedback=feedback,target='background')

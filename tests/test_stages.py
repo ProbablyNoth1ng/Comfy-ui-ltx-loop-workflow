@@ -9,6 +9,84 @@ from comfy_ltx_loop.staged_comfy import ComfyLTXLoopMotionEditor, ComfyLTXLoopSa
 
 
 class StageTests(unittest.TestCase):
+    def test_qwen2b_choice_preserves_existing_widget_slots_and_defaults(self):
+        inputs = ComfyLTXLoopMotionEditor.INPUT_TYPES()['required']
+        self.assertEqual(list(inputs), ['image','motion_prompt','requested_parts','duration',
+            'fps','strength','short_side','seed','vision_model','preparation','plan_json','stage'])
+        self.assertEqual(inputs['preparation'][0][:3], ['local Qwen','manual','local Qwen3.5'])
+        self.assertIn('local Qwen3-VL 2B', inputs['preparation'][0])
+        self.assertEqual(inputs['preparation'][1]['default'], 'local Qwen3.5')
+        self.assertEqual(inputs['vision_model'][1]['default'], 'models/Qwen3.5-9B')
+
+    def test_qwen2b_prepares_each_target_with_the_selected_snapshot(self):
+        import numpy as np
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        path = 'models/Qwen3-VL-2B-Instruct'
+        def proposals(source, prompt, requested, model, feedback=None, target='character'):
+            self.assertEqual(model, path)
+            return [dict(label='leaf' if target == 'background' else 'hair tip',
+                x=.3,y=.4,body_part='foliage' if target == 'background' else 'hair',
+                motion_role='move',reason='Requested sway')]
+        for target, labels in [('character',['hair tip']),('background',['leaf']),
+                               ('both',['hair tip','leaf'])]:
+            with self.subTest(target=target), \
+                 patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image), \
+                 patch('comfy_ltx_loop.staged_comfy.analyze',side_effect=proposals):
+                plan = ComfyLTXLoopMotionEditor().execute(image,'Hair sway','auto',6,24,.01,720,
+                    42,path,'local Qwen3-VL 2B','{}','prepare',background_prompt='Leaves sway',
+                    prepare_target=target)['result'][2]
+            self.assertEqual([p['label'] for p in plan['landmarks']], labels)
+            self.assertEqual(plan['review']['state'], 'pending')
+            for group in (['character','background'] if target == 'both' else [target]):
+                settings = plan['analysis' if group == 'character' else 'background']
+                self.assertEqual(settings['prepared_model_path'], path)
+
+    def test_switching_to_2b_requires_reprepare_of_each_model_group(self):
+        import numpy as np
+        from comfy_ltx_loop.motion import review_plan
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        points = [dict(label='tip',x=.3,y=.4,body_part='hair',motion_role='move',reason='sway')]
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image), \
+             patch('comfy_ltx_loop.staged_comfy.analyze',return_value=points):
+            editor = ComfyLTXLoopMotionEditor()
+            old = editor.execute(image,'hair','auto',6,24,.01,720,42,
+                'models/Qwen3-VL-8B-Instruct','local Qwen','{}','prepare',
+                background_prompt='Leaves sway',prepare_target='both')['result'][2]
+            reviewed = json.dumps(review_plan(old))
+            for active in [(True,False),(False,True)]:
+                with self.subTest(active=active), self.assertRaisesRegex(ValueError, 'prepare'):
+                    editor.execute(image,'hair','auto',6,24,.01,720,42,
+                        'models/Qwen3-VL-2B-Instruct','local Qwen3-VL 2B',reviewed,'render',
+                        background_prompt='Leaves sway',use_character_points=active[0],
+                        use_background_points=active[1])
+            partial = editor.execute(image,'hair','auto',6,24,.01,720,42,
+                'models/Qwen3-VL-2B-Instruct','local Qwen3-VL 2B',reviewed,'prepare',
+                background_prompt='Leaves sway',prepare_target='character')['result'][2]
+            self.assertEqual(partial['analysis']['prepared_model_path'], 'models/Qwen3-VL-2B-Instruct')
+            with self.assertRaisesRegex(ValueError, 'Prepare background'):
+                review_plan(partial)
+            complete = editor.execute(image,'hair','auto',6,24,.01,720,42,
+                'models/Qwen3-VL-2B-Instruct','local Qwen3-VL 2B',json.dumps(partial),'prepare',
+                background_prompt='Leaves sway',prepare_target='background')['result'][2]
+            self.assertEqual(review_plan(complete)['review']['state'], 'reviewed')
+
+    def test_qwen2b_load_failure_preserves_points_and_preparation_history(self):
+        import numpy as np
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        points = [dict(label='tip',x=.3,y=.4,body_part='hair',motion_role='move',reason='sway')]
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image):
+            editor = ComfyLTXLoopMotionEditor()
+            with patch('comfy_ltx_loop.staged_comfy.analyze',return_value=points):
+                old = editor.execute(image,'hair','auto',6,24,.01,720,42,
+                    'models/Qwen3.5-9B','local Qwen3.5','{}','prepare')['result'][2]
+            with patch('comfy_ltx_loop.staged_comfy.analyze',side_effect=RuntimeError('loading failed')):
+                failed = editor.execute(image,'hair','auto',6,24,.01,720,42,
+                    'models/Qwen3-VL-2B-Instruct','local Qwen3-VL 2B',json.dumps(old),'prepare')['result'][2]
+        self.assertEqual(failed['landmarks'], old['landmarks'])
+        self.assertEqual(failed['analysis'], old['analysis'])
+        self.assertIn('loading failed', failed['feedback'][0])
+        self.assertEqual(failed['review']['state'], 'pending')
+
     def test_direct_render_without_preparation_uses_empty_tracks_and_text(self):
         import numpy as np
         image = np.zeros((1,100,80,3),dtype=np.float32)

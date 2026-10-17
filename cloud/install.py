@@ -16,6 +16,7 @@ from urllib.request import urlopen
 
 QWEN_REPO = 'Qwen/Qwen3.5-9B'
 VISION_REPOS = (QWEN_REPO, 'Qwen/Qwen3-VL-8B-Instruct')
+LIGHT_VISION_REPO = 'Qwen/Qwen3-VL-2B-Instruct'
 # ComfyUI v0.38.0 includes the LTX-2.5 diffusion video VAE loader.
 COMFY_COMPAT_REVISION = '6b747c0428c343e1417219641db93a4fb7cb69ae'
 UPSCALER = 'upscale_models/realesr-animevideov3.pth'
@@ -106,7 +107,8 @@ def model_signature(assets, vision_repo):
 
 
 def resolve_plan(assets, vision_repo=QWEN_REPO):
-    vision_repo = select_vision_repo(vision_repo, None)
+    if vision_repo != LIGHT_VISION_REPO:
+        vision_repo = select_vision_repo(vision_repo, None)
     from huggingface_hub import HfApi
     api = HfApi()
     repositories = {}
@@ -144,8 +146,53 @@ def resolve_plan(assets, vision_repo=QWEN_REPO):
     return records
 
 
-def download_models(project, comfy, state, vision_repo=None):
+def download_records(root, records):
     from huggingface_hub import hf_hub_download
+    missing_bytes = sum(r['size'] for r in records if not files_complete(root, [r]))
+    if shutil.disk_usage(root).free < missing_bytes + 5 * 1024 ** 3:
+        raise RuntimeError(f'Insufficient disk space: need about {missing_bytes / 1024**3 + 5:.1f} GiB free.')
+    completed = []
+    for record in records:
+        print('Downloading/checking: ' + record['target'], flush=True)
+        destination = root / record['target']
+        # Hub's pinned-commit metadata may reuse a local file without a size check.
+        force = destination.is_file() and destination.stat().st_size != record['size']
+        try:
+            path = Path(hf_hub_download(repo_id=record['repo'], filename=record['filename'],
+                                       revision=record['revision'], local_dir=root / record['local_dir'],
+                                       force_download=force))
+        except Exception as error:
+            raise RuntimeError('Download failed for ' + record['target']
+                               + '. Check HF_TOKEN/access/network and restart to resume ('
+                               + type(error).__name__ + ').') from None
+        if path.resolve() != (root / record['target']).resolve() or path.stat().st_size != record['size']:
+            raise RuntimeError('Incomplete model: ' + record['target'])
+        print('Verifying SHA256: ' + record['target'], flush=True)
+        digest = sha256(path)
+        if record['sha256'] and digest != record['sha256']:
+            raise RuntimeError('Model checksum mismatch: ' + record['target'])
+        completed.append(dict(record, sha256=digest))
+    return completed
+
+
+def ensure_light_vision(root, state):
+    folder = LIGHT_VISION_REPO.split('/')[-1]
+    manifest_path = state / ('vision-'+folder+'.json')
+    ready = read_json(manifest_path)
+    if ready and files_complete(root, ready['files']):
+        return
+    plan_path = state / ('vision-'+folder+'-plan.json')
+    plan = read_json(plan_path)
+    if not plan:
+        # A completed manifest is also a recovery plan; never resolve main again.
+        records = ready['files'] if ready else resolve_plan([], LIGHT_VISION_REPO)
+        plan = dict(vision_repo=LIGHT_VISION_REPO, files=records)
+        write_json(plan_path, plan)
+    completed = download_records(root, plan['files'])
+    write_json(manifest_path, dict(vision_repo=LIGHT_VISION_REPO, files=completed))
+
+
+def download_models(project, comfy, state, vision_repo=None):
     assets = model_assets(read_json(project / 'workflows/ltx-2.5-motion-track.official.json'))
     root = comfy / 'models'
     root.mkdir(exist_ok=True)
@@ -171,6 +218,7 @@ def download_models(project, comfy, state, vision_repo=None):
     if ready and ready['signature'] == signature and files_complete(root, ready['files']):
         upscaler = next(r for r in ready['files'] if r['target'] == UPSCALER)
         if sha256(root / UPSCALER) == upscaler['sha256']:
+            ensure_light_vision(root, state)
             write_json(state / 'models-ready.json', ready)
             print('Models already downloaded; using existing files on this disk.', flush=True)
             return
@@ -180,27 +228,7 @@ def download_models(project, comfy, state, vision_repo=None):
                    if ready and ready['signature'] == signature else resolve_plan(assets, vision_repo))
         plan = dict(signature=signature, vision_repo=vision_repo, files=records)
         write_json(state / 'models-plan.json', plan)
-    missing_bytes = sum(r['size'] for r in plan['files']
-                        if not files_complete(root, [r]))
-    if shutil.disk_usage(root).free < missing_bytes + 5 * 1024 ** 3:
-        raise RuntimeError(f'Insufficient disk space: need about {missing_bytes / 1024**3 + 5:.1f} GiB free.')
-    completed = []
-    for record in plan['files']:
-        print('Downloading/checking: ' + record['target'], flush=True)
-        try:
-            path = Path(hf_hub_download(repo_id=record['repo'], filename=record['filename'],
-                                       revision=record['revision'], local_dir=root / record['local_dir']))
-        except Exception as error:
-            raise RuntimeError('Download failed for ' + record['target']
-                               + '. Check HF_TOKEN/access/network and restart to resume ('
-                               + type(error).__name__ + ').') from None
-        if path.resolve() != (root / record['target']).resolve() or path.stat().st_size != record['size']:
-            raise RuntimeError('Incomplete model: ' + record['target'])
-        print('Verifying SHA256: ' + record['target'], flush=True)
-        digest = sha256(path)
-        if record['sha256'] and digest != record['sha256']:
-            raise RuntimeError('Model checksum mismatch: ' + record['target'])
-        completed.append(dict(record, sha256=digest))
+    completed = download_records(root, plan['files'])
     upscaler = root / UPSCALER
     upscaler.parent.mkdir(exist_ok=True)
     if not ready or not files_complete(root, [r for r in ready['files'] if r['target'] == UPSCALER]) or (
@@ -222,6 +250,7 @@ def download_models(project, comfy, state, vision_repo=None):
                     raise RuntimeError('Real-ESRGAN download/validation failed. Restart to retry.') from None
                 time.sleep(3)
     completed.append(dict(target=UPSCALER, size=upscaler.stat().st_size, sha256=sha256(upscaler)))
+    ensure_light_vision(root, state)
     completed_manifest = dict(signature=signature, vision_repo=vision_repo, files=completed)
     write_json(state / 'models-ready.json', completed_manifest)
     write_json(state / ('models-'+vision_repo.split('/')[-1]+'-ready.json'), completed_manifest)

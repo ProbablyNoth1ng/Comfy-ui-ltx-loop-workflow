@@ -13,13 +13,13 @@ class Element {
 }
 const descendants=root=>[root,...root.children.flatMap(descendants)];
 let instance=0;
-async function fixture() {
+async function fixture(overrides={}) {
   globalThis.document={createElement:tag=>new Element(tag),body:new Element('body')};
   globalThis.Image=class {naturalWidth=600;naturalHeight=900;set src(value){this.source=value;this.onload?.();}};
   const values={motion_prompt:'Hair sway. Face still.',requested_parts:'auto',duration:6,fps:24,strength:.01,
     short_side:720,seed:42,vision_model:'models/Qwen3-VL-8B-Instruct',preparation:'local Qwen3.5',plan_json:'{}',stage:'render',
     animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character',
-    use_character_points:true,use_background_points:true};
+    use_character_points:true,use_background_points:true,...overrides};
   const node={id:2,type:'ComfyLTXLoopMotionEditor',size:[520,300],properties:{},
     widgets:Object.entries(values).map(([name,value])=>({name,value})),
     addDOMWidget(name,type,root){this.root=root;return{};},setSize(size){this.size=size;}};
@@ -55,6 +55,31 @@ test('Qwen preparation populates bundled paths while preserving custom and seria
   f.widget('vision_model').value='/custom/snapshot';mode.value='local Qwen3.5';mode.callback?.(mode.value);
   assert.equal(f.widget('vision_model').value,'/custom/snapshot');
   f.node.onConfigure();assert.equal(f.widget('vision_model').value,'/custom/snapshot');
+});
+
+test('2B selection maps bundled paths, stales review and survives workflow reopen',async()=>{
+  const f=await fixture();await f.button('Accept point review').onclick();
+  const mode=f.widget('preparation');mode.value='local Qwen3-VL 2B';mode.callback(mode.value);
+  assert.equal(f.widget('vision_model').value,'models/Qwen3-VL-2B-Instruct');
+  assert.equal(f.plan().review.state,'pending');
+  const points=JSON.stringify(f.plan().landmarks);
+  f.node.onConfigure();
+  assert.equal(mode.value,'local Qwen3-VL 2B');
+  assert.equal(f.widget('vision_model').value,'models/Qwen3-VL-2B-Instruct');
+  assert.equal(JSON.stringify(f.plan().landmarks),points);
+  mode.value='local Qwen';mode.callback(mode.value);
+  assert.equal(f.widget('vision_model').value,'models/Qwen3-VL-8B-Instruct');
+  mode.value='local Qwen3.5';mode.callback(mode.value);
+  assert.equal(f.widget('vision_model').value,'models/Qwen3.5-9B');
+});
+
+test('saved 2B and custom snapshots retain their model paths and selector values',async()=>{
+  for(const path of ['models/Qwen3-VL-2B-Instruct','/custom/snapshot']){
+    const f=await fixture({preparation:'local Qwen3-VL 2B',vision_model:path});
+    assert.equal(f.widget('vision_model').value,path);
+    f.node.onConfigure();assert.equal(f.widget('vision_model').value,path);
+    assert.equal(f.widget('preparation').value,'local Qwen3-VL 2B');
+  }
 });
 
 test('point group switches preserve saved points and require renewed review on reopen',async()=>{
