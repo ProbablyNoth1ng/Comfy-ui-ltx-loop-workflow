@@ -82,6 +82,14 @@ Update [codemap.md](../codemap.md) whenever project structure changes.
 
 ## Delivery notes
 
+- 2026-10-17: Added agent-only image-to-video prompt assistance. When an owner
+  supplies an inspectable image and asks for animation-prompt help, the agent runs
+  an adaptive, one-question-at-a-time interview and returns English positive,
+  negative and background prompts for the existing LTX-2.5 workflow. This changes
+  no product behavior, model setting, point preparation or rendering path. See the
+  [workflow design](superpowers/specs/2026-10-08-project-workflow-design.md) and
+  [plan](superpowers/plans/2026-10-08-project-workflow.md).
+
 - 2026-10-17: P-15 adds a lightweight point proposal choice and a separately pinned
   automatic-install snapshot, including recovery of truncated Hub cache files.
   Local regressions and independent code review completed; GPU memory, model

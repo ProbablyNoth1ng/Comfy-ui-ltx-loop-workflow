@@ -35,6 +35,69 @@ The owner's direct instructions take precedence. Preserve unrelated working-tree
 - Keep current specs concise. Older plans and reports provide history; unchecked old
   plan boxes are not authoritative proof that current code is missing a feature.
 
+## Image-to-video prompt assistance
+
+Apply these rules when a user supplies an image or accessible image path and asks
+for help writing an animation prompt. This is prompt authoring only: do not change
+code or specifications, prepare points, or render unless the user separately asks.
+
+### Inspect and interview
+
+- Inspect the image before suggesting motion. If it cannot be inspected, ask for an
+  accessible image rather than inventing visual details.
+- Ask questions in the user's language; write the finished prompts in English.
+- Ask one focused question at a time. Remember answers and do not repeat questions
+  that the user has already answered.
+- Begin with the character: visible hair, then clothing/accessories, then face and
+  body. Skip an absent or irrelevant category. For every part selected to move,
+  clarify motion, direction, speed and amplitude as needed, offering concrete
+  suggestions grounded in the inspected image.
+- If no character is visible, skip character questions and begin with the visible
+  background objects.
+- Do not add motion the user did not request, including blinking, breathing, hair
+  sway, clothing movement or expression changes.
+- After character questions, ask which visible background objects should move and
+  how. Identify attached structures and nearby objects that must remain stationary.
+- Keep the camera stationary by default. If requested camera movement conflicts with
+  this project's rendering workflow, explain that constraint before finalizing.
+- Use the existing six-second loop duration unless the user specifies another. Ask
+  the user to resolve conflicting motion or duration instructions before producing
+  prompts, including conflicting motion directions.
+
+### Finished prompt format
+
+Return exactly three labelled, separately copyable fenced blocks and no additional
+prompt blocks:
+
+1. **Positive Prompt** for `motion_prompt`: approved character motion, relevant
+   stationary parts and a fixed camera.
+2. **Negative Prompt** for `Prompt (negative)`: concise unwanted artifacts and
+   motions relevant to the user's choices.
+3. **Background Prompt** for `background_prompt`: approved scenery motion and
+   stationary environmental anchors.
+
+When the background must stay still, leave the Background Prompt block empty. Do
+not put `static background`, `none`, or explanatory text inside it: any nonblank
+text enables background animation. For background-only animation, keep the
+character stationary in Positive Prompt and put scenery motion only in Background
+Prompt.
+
+### LTX prompt writing
+
+- Use concise, natural English with present-tense action verbs in a coherent
+  single-shot description. Describe what changes over time rather than repeating
+  the source image's appearance, following the official
+  [LTX image-to-video guidance](https://docs.ltx.io/open-source-model/usage-guides/image-to-video).
+- Name moving and stationary parts precisely: for example, moving hair tips with
+  stationary roots, or moving leaves with stationary trunks. Keep wind direction
+  and intensity consistent across character and scenery.
+- For loops, describe smooth recurring motion returning toward the starting
+  configuration. Do not promise a seamless result or introduce ping-pong playback.
+- Preserve the source illustration's style. Do not add `anime`, `animation`, or
+  `cartoon` to Negative Prompt merely because generic examples include them.
+- Treat prompts as guidance, not guaranteed pixel protection or exact point
+  trajectories.
+
 ## Test first, then production code
 
 - For every new or changed production behavior, write a meaningful acceptance or

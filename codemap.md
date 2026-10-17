@@ -9,7 +9,7 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 | Work | Start here | Tests / reference |
 | --- | --- | --- |
 | Product intent and accepted behavior | `docs/product-spec.md` | `docs/superpowers/specs/2026-10-09-comfy-ltx-loop-rebrand-design.md`, baseline and render designs |
-| Development workflow and new specs | `AGENTS.md`, `docs/superpowers/README.md` | Workflow design and plan under `docs/superpowers/` |
+| Development workflow, new specs and image-to-video prompt help | `AGENTS.md`, `docs/superpowers/README.md` | Workflow design and plan under `docs/superpowers/` |
 | Motion plans, roles, groups, review, timing and canvas mapping | `comfy_ltx_loop/motion.py` | `tests/test_motion.py`, `tests/test_semantic_points.py` |
 | Strict render modes, point-linked source masks and protected-pixel compositing | `comfy_ltx_loop/motion.py`, `comfy_ltx_loop/candidates.py` | `tests/test_motion.py`, `tests/test_candidates.py` |
 | Optional point-group selection and direct Render | `comfy_ltx_loop/motion.py`, `staged_comfy.py`, editor web module | `tests/test_motion.py`, `tests/test_stages.py`, `tests/test_editor_semantics.mjs` |
@@ -61,7 +61,7 @@ the next section. Tree comments explain ownership rather than guarantee behavior
 ```text
 anime-loop-research/
 ├── .gitignore
-├── AGENTS.md                         Agent workflow and project constraints
+├── AGENTS.md                         Agent workflow, project constraints and image-to-video prompt assistance
 ├── codemap.md                        This maintained navigation map
 ├── pyproject.toml                    Python package metadata and dependency pins
 ├── README.md                         Primary ComfyUI usage and documentation entry

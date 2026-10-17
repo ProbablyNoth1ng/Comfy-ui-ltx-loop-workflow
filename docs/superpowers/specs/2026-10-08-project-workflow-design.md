@@ -85,6 +85,48 @@ This superseded note originally described a prose-only edit. The later
 replaces every technical identifier and public interface as an intentional
 breaking change; it is the authoritative record.
 
+## Documentation maintenance: image-to-video prompt assistance, 2026-10-17
+
+### Intent and scope
+
+When an owner supplies an image and requests help writing an animation prompt, the
+agent must inspect it first and conduct a one-question-at-a-time interview in the
+owner's language. The deliverable is three separately copyable English prompts for
+the existing LTX-2.5 workflow. This is agent guidance only: it does not change
+product behavior, model settings, point preparation, rendering or the official
+baseline.
+
+### Contract and acceptance criteria
+
+- The interview starts with visible character hair, then clothing/accessories, face
+  and body where relevant; it then covers visible background motion and stationary
+  anchors. It remembers answers and never adds unrequested motion.
+- The camera is stationary by default, duration is six seconds unless the owner
+  says otherwise, and conflicting instructions are resolved before output.
+- Output contains exactly Positive Prompt (`motion_prompt`), Negative Prompt
+  (`Prompt (negative)`) and Background Prompt (`background_prompt`) blocks. A
+  stationary background has an empty final block; background-only requests keep
+  the character stationary in the positive block.
+- Prompts are concise, present-tense English that distinguishes moving parts from
+  stationary anchors, preserves source style, uses consistent wind, describes
+  recurring loop motion without promising a seamless loop or ping-pong playback,
+  and treats prompt control as guidance rather than a guarantee.
+- An inaccessible image results in a request for an accessible image rather than
+  invented details. Complete instructions require no repeated questions.
+
+### Research and verification
+
+On 2026-10-17, Context7 lookup selected the official `/websites/ltx_io` LTX-2
+documentation (High reputation) and its image-to-video guidance was checked at
+[LTX Image-to-Video](https://docs.ltx.io/open-source-model/usage-guides/image-to-video).
+It directs image-to-video prompts toward motion/action and camera movement because
+the source image already supplies appearance. The project contract retains its
+own silent six-second loop and stationary-camera defaults; no dependency or model
+revision changes. Verify this documentation change with Markdown-link, inventory
+and diff checks, including hair-only, clothing-only, background-only, stationary
+background, no-character, complete-instruction, inaccessible-image and conflicting-
+direction scenarios.
+
 ## Verification boundary
 
 ### Context7 research and connection evidence, 2026-10-08
