@@ -10,6 +10,7 @@ from PIL import Image
 
 from .motion import new_plan, require_review, canvas_tracks, validate_plan, active_point
 from .vision import analyze
+from .areas import propose_motion_areas
 from .candidates import save_candidate, load_handle, finish_candidate, list_candidates
 
 
@@ -60,7 +61,7 @@ class ComfyLTXLoopMotionEditor:
             'vision_model':('STRING',{'default':'models/Qwen3.5-9B'}),
             'preparation':(['local Qwen','manual','local Qwen3.5','local Qwen3-VL 2B'],{'default':'local Qwen3.5'}),
             'plan_json':('STRING',{'default':'{}','multiline':True}),
-            'stage':(['render','prepare'],)},
+            'stage':(['render','prepare','areas'],)},
             'optional':{
                 'animate_background':('BOOLEAN',{'default':False}),
                 'background_prompt':('STRING',{'default':'','multiline':True,
@@ -98,7 +99,24 @@ class ComfyLTXLoopMotionEditor:
         # deserialize in the same order. Text is now the sole animation switch.
         background = {'enabled':bool(background_prompt.strip()),'prompt':background_prompt,
                       'preparation':background_preparation,'model_path':vision_model}
-        if stage == 'prepare':
+        if stage == 'areas':
+            try:
+                plan = validate_plan(json.loads(plan_json))
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+                raise ValueError('Prepare a valid motion plan before updating motion areas') from error
+            if plan['source_id'] != identity:
+                raise ValueError('Source image changed; prepare points again')
+            before = json.dumps(plan['landmarks'], sort_keys=True)
+            try:
+                plan = propose_motion_areas(source, plan)
+            except Exception as error:
+                plan['feedback'] = [*plan.get('feedback', []),
+                    f'Automatic motion areas failed: {error}. Paint areas manually or retry.']
+            if json.dumps(plan['landmarks'], sort_keys=True) != before:
+                raise ValueError('Area preparation must not modify points')
+            plan['review'] = {'state':'pending'}
+            validate_plan(plan)
+        elif stage == 'prepare':
             if prepare_target not in ('character','background','both'):
                 raise ValueError('Choose character, background, or combined preparation')
             if prepare_target in ('background','both') and not background_prompt.strip():
@@ -200,7 +218,7 @@ class ComfyLTXLoopMotionEditor:
                 if 'prepared_prompt' not in plan.get('analysis', {}):
                     plan['analysis'] = analysis
         else:
-            raise ValueError('Choose Prepare or Render')
+            raise ValueError('Choose Prepare, Update motion areas, or Render')
         canvas = canvas_image(source,plan['transform'])
         buffer = BytesIO()
         source.save(buffer,format='PNG')

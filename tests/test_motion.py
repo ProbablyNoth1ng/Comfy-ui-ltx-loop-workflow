@@ -5,9 +5,15 @@ import unittest
 from comfy_ltx_loop.motion import (new_plan, parse_landmarks, validate_plan,
                                  review_plan, require_review, canvas_transform,
                                  canvas_tracks, plan_fingerprint, legacy_plan_fingerprint)
+from comfy_ltx_loop.areas import area_fingerprint
 
 
 class MotionTests(unittest.TestCase):
+    def test_strict_review_names_each_missing_or_stale_area(self):
+        plan = self.plan()
+        plan['render_mode'] = 'only_pointed_parts'
+        with self.assertRaisesRegex(ValueError, r'Update motion areas: 1\. .*'):
+            review_plan(plan)
     def test_strict_mode_requires_mask_for_each_active_moving_point_and_invalidates_review(self):
         plan = new_plan('abc', (4, 4), 'hair', ['tip'], [
             {'label':'hair tip','x':.25,'y':.25,'motion_role':'move','body_part':'hair','reason':'sway'},
@@ -19,7 +25,8 @@ class MotionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'motion area'):
             review_plan(plan)
         plan['motion_areas'] = [{'point_id':moving, 'mask':[
-            [0,0,0,0], [0,255,0,0], [0,0,0,0], [0,0,0,0]]}]
+            [0,0,0,0], [0,255,0,0], [0,0,0,0], [0,0,0,0]],
+            'freshness':{'source':'abc','point':area_fingerprint(plan['landmarks'][0])}}]
         reviewed = review_plan(plan)
         self.assertEqual(reviewed['review']['state'], 'reviewed')
         reviewed['motion_areas'][0]['mask'][1][1] = 0

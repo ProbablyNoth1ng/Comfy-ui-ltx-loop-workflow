@@ -1,6 +1,6 @@
 export function stageGraph(output, target, stage) {
     const graph = structuredClone(output);
-    const targets = {prepare:'ComfyLTXLoopMotionEditor', render:'ComfyLTXLoopSaveCandidate', upscale:'ComfyLTXLoopUpscale'};
+    const targets = {prepare:'ComfyLTXLoopMotionEditor', areas:'ComfyLTXLoopMotionEditor', render:'ComfyLTXLoopSaveCandidate', upscale:'ComfyLTXLoopUpscale'};
     if (!targets[stage]) throw new Error(`Unknown stage ${stage}`);
     const targetClass=graph[String(target)]?.class_type;
     if (targetClass !== targets[stage] && !(stage === 'upscale' && targetClass === 'ComfyLTXLoopFinish')) {
@@ -19,8 +19,8 @@ export function stageGraph(output, target, stage) {
     visit(target);
     for (const id of Object.keys(graph)) if (!keep.has(id)) delete graph[id];
     const classes = new Set(Object.values(graph).map(n => n.class_type));
-    if (stage === 'prepare' && [...classes].some(c => !['ComfyLTXLoopMotionEditor', 'LoadImage'].includes(c))) {
-        throw new Error('Prepare must connect directly to Load Image; model nodes cannot be upstream.');
+    if ((stage === 'prepare' || stage === 'areas') && [...classes].some(c => !['ComfyLTXLoopMotionEditor', 'LoadImage'].includes(c))) {
+        throw new Error('Preparation must connect directly to Load Image; model nodes cannot be upstream.');
     }
     if (stage !== 'upscale' && (classes.has('ComfyLTXLoopUpscale') || classes.has('ComfyLTXLoopFinish'))) throw new Error('Upscale cannot run in this stage.');
     if (stage === 'upscale' && [...classes].some(c => !['ComfyLTXLoopUpscale','ComfyLTXLoopFinish','ComfyLTXLoopSavedCandidate'].includes(c))) {
@@ -33,7 +33,7 @@ export function stageGraph(output, target, stage) {
         }
     }
     for (const node of Object.values(graph)) {
-        if (node.class_type === 'ComfyLTXLoopMotionEditor') node.inputs.stage = stage === 'prepare' ? 'prepare' : 'render';
+        if (node.class_type === 'ComfyLTXLoopMotionEditor') node.inputs.stage = (stage === 'prepare' || stage === 'areas') ? stage : 'render';
     }
     return graph;
 }

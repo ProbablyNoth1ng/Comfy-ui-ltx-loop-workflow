@@ -13,6 +13,7 @@ from PIL import Image
 
 from comfy_ltx_loop.candidates import save_candidate, save_record, load_handle, finish_candidate, anime_enhancer, tiled_anime_scale
 from comfy_ltx_loop.motion import new_plan, review_plan
+from comfy_ltx_loop.areas import area_fingerprint
 
 
 class CandidateTests(unittest.TestCase):
@@ -24,7 +25,8 @@ class CandidateTests(unittest.TestCase):
             plan['render_mode'] = 'only_pointed_parts'
             point = plan['landmarks'][0]['id']
             mask = [[255 if 12 <= x < 20 and 12 <= y < 20 else 0 for x in range(32)] for y in range(32)]
-            plan['motion_areas'] = [{'point_id':point,'mask':mask}]
+            plan['motion_areas'] = [{'point_id':point,'mask':mask,
+                'freshness':{'source':'abc','point':area_fingerprint(plan['landmarks'][0])}}]
             plan = review_plan(plan)
             generated = np.full((9,256,256,3), [0,255,0], dtype=np.uint8)
             source = np.full((32,32,3), [255,0,0], dtype=np.uint8)

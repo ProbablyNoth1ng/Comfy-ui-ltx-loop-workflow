@@ -26,6 +26,8 @@ async function queue(stage, target, status, expectedGraph, prepareTarget='charac
         if(stage==='render') {
             const editor=find('ComfyLTXLoopMotionEditor');
             const plan=checkSettings(editor);
+            const blocker=areaBlocker(plan);
+            if(blocker)throw new Error(blocker);
             if(plan && plan.review?.state!=='reviewed') {
                 throw new Error('Review points and click Accept point review before Render.');
             }
@@ -39,6 +41,8 @@ async function queue(stage, target, status, expectedGraph, prepareTarget='charac
         if(stage==='render') {
             const editor=find('ComfyLTXLoopMotionEditor');
             const plan=checkSettings(editor);
+            const blocker=areaBlocker(plan);
+            if(blocker)throw new Error(blocker);
             if(plan && plan.review?.state!=='reviewed') {
                 throw new Error('Review points and click Accept point review before Render.');
             }
@@ -70,6 +74,21 @@ async function queue(stage, target, status, expectedGraph, prepareTarget='charac
         return false;
     }
 }
+
+function areaBlocker(plan) {
+    if(!plan||plan.render_mode!=='only_pointed_parts')return null;
+    const geometry=point=>JSON.stringify({id:point.id,x:point.x,y:point.y,strength:point.strength,path:point.path});
+    const active=point=>point.enabled&&(point.group==='background'
+        ?plan.use_background_points!==false&&plan.background?.enabled:plan.use_character_points!==false);
+    const missing=[];
+    for(const [index,point] of (plan.landmarks??[]).entries())if(active(point)&&pointRoleForPlan(point)==='move'){
+        const area=(plan.motion_areas??[]).find(item=>item.point_id===point.id);
+        const fresh=area?.freshness?.source===plan.source_id&&(area.freshness.point||JSON.stringify(area.freshness.geometry)===geometry(point));
+        if(!fresh||!area.mask?.some(row=>row.some(Boolean)))missing.push(`${index+1}. ${point.label}`);
+    }
+    return missing.length?`Update motion areas: ${missing.join(', ')}`:null;
+}
+function pointRoleForPlan(point){return point.motion_role??(point.path?.every(key=>key.x===point.x&&key.y===point.y)?'anchor':'move');}
 
 let stageChooser;
 
@@ -121,6 +140,7 @@ function showStageChooser(graph) {
     };
     choose('prepare','Prepare character points');choose('prepare','Prepare background points','background');
     choose('prepare','Prepare character + background points','both');
+    choose('areas','Update motion areas');
     choose('render','Render');choose('upscale','Upscale');
     const cancel=button(actions,'Cancel',closeStageChooser);controls.push(cancel);
     const reasons=Object.values(targets).map(state=>state.reason).filter(Boolean);
@@ -262,7 +282,7 @@ function editor(node) {
     const pathY=element('input',pathTools);pathY.type='number';pathY.min=0;pathY.max=1;pathY.step=.001;pathY.style.width='70px';pathY.title='Normalized path y';
     const hint=element('p',root,'Drag landmarks to move. Select a landmark, then drag its path handles. Add points by clicking the image.');
     const timeline=element('input',root);timeline.type='range';timeline.min=0;timeline.max=1;timeline.step=.005;timeline.value=0;timeline.style.width='100%';
-    let background=new Image(),selected=-1,adding=false,drag=null,timer=null,rect=null,reviewButton=null;
+    let background=new Image(),selected=-1,adding=false,drag=null,timer=null,rect=null,reviewButton=null,areaMode='points';
     const pointRole=point=>point.motion_role??(point.path.every(k=>k.x===point.x&&k.y===point.y)?'anchor':'move');
     const color=point=>!point.enabled?'#aaa':pointRole(point)==='anchor'?'#72c8ff':'#a7ff69';
     const group=point=>point.group??'character';
@@ -327,6 +347,7 @@ function editor(node) {
         control.callback=function(){changed?.apply(this,arguments);
             if(name==='preparation')populateModelPath();
             const p=plan();if(!validPlan(p))return;
+            if(name==='render_mode')p.render_mode=widget(node,'render_mode').value;
             if(['motion_prompt','requested_parts','preparation','vision_model'].includes(name)){
                 p.review={state:'pending'};widget(node,'plan_json').value=JSON.stringify(p);persist(p);
             }else if(['duration','fps','short_side'].includes(name)){
@@ -366,6 +387,33 @@ function editor(node) {
         pathSelection();
         renderList();
     }
+    const areaTools=element('div',root);
+    const brush=element('input',areaTools);brush.type='range';brush.min=1;brush.max=80;brush.value=18;brush.title='Brush size';
+    function geometry(point){return {id:point.id,x:point.x,y:point.y,strength:point.strength,path:point.path};}
+    function selectedArea(p, create=false) {
+        const point=p.landmarks?.[selected];if(!point||pointRole(point)!=='move')return null;
+        let area=(p.motion_areas??[]).find(item=>item.point_id===point.id);
+        if(!area&&create) {
+            const [width,height]=p.source_size;
+            area={point_id:point.id,mask:Array.from({length:height},()=>Array(width).fill(0)),
+                freshness:{source:p.source_id,geometry:geometry(point),kind:'manual'}};
+            (p.motion_areas??=[]).push(area);
+        }
+        return area;
+    }
+    function stampArea(where, erase=false) {
+        const p=plan(),point=p.landmarks?.[selected],area=selectedArea(p,true);if(!area||!where)return;
+        const [width,height]=p.source_size, radius=Number(brush.value)/Math.max(rect.w,rect.h);
+        const cx=Math.round(where.x*(width-1)),cy=Math.round(where.y*(height-1));
+        const rx=Math.max(1,Math.round(radius*width)),ry=Math.max(1,Math.round(radius*height));
+        for(let y=Math.max(0,cy-ry);y<=Math.min(height-1,cy+ry);y++)for(let x=Math.max(0,cx-rx);x<=Math.min(width-1,cx+rx);x++)
+            if(((x-cx)/rx)**2+((y-cy)/ry)**2<=1)area.mask[y][x]=erase?0:255;
+        area.freshness={source:p.source_id,geometry:geometry(point),kind:'manual'};save(p);
+    }
+    button(areaTools,'Edit points',()=>{areaMode='points';status.textContent='Edit points and trajectories.';});
+    button(areaTools,'Paint area',()=>{areaMode='paint';status.textContent='Paint the selected moving point area.';});
+    button(areaTools,'Erase area',()=>{areaMode='erase';status.textContent='Erase from the selected moving point area.';});
+    button(areaTools,'Clear selected area',()=>{const p=plan(),area=selectedArea(p);if(!area)return;for(const row of area.mask)row.fill(0);save(p);});
     function renderList() {
         pointList.replaceChildren();
         const current=plan(),points=current.landmarks;
@@ -385,8 +433,8 @@ function editor(node) {
         }
         for(const name of (visibilityControl.value==='all'?['character','background']:[visibilityControl.value])) {
           const section=element('div',pointList);section.setAttribute('aria-label',`${name} points`);
-          element('strong',section,name==='character'?'Character':'Background');
-          const listed=points.entries().filter(([,point])=>group(point)===name);
+          const listed=Array.from(points.entries()).filter(([,point])=>group(point)===name);
+          element('strong',section,`${name==='character'?'Character':'Background'} (${listed.length})`);
           if(!listed.length)element('p',section,`No ${name} points. Use Add ${name} point to place one.`);
           for(const [index,point] of listed) {
             const row=button(section,`${index+1}. ${point.label} · ${pointRole(point)} (${point.x.toFixed(3)}, ${point.y.toFixed(3)}) · ${point.enabled?'enabled':'disabled'}`,()=>{
@@ -422,6 +470,15 @@ function editor(node) {
         ctx.drawImage(background,rect.x,rect.y,rect.w,rect.h);
         const p=plan();
         if(!validPlan(p))return;
+        const area=selectedArea(p);
+        if(area&&rect){
+            const [width,height]=p.source_size;
+            ctx.fillStyle='#ffb44c';ctx.globalAlpha=.28;
+            for(let sy=0;sy<300;sy+=2)for(let sx=0;sx<480;sx+=2){
+                const nx=(sx-rect.x)/rect.w,ny=(sy-rect.y)/rect.h;
+                if(nx>=0&&nx<=1&&ny>=0&&ny<=1&&area.mask[Math.min(height-1,Math.floor(ny*height))]?.[Math.min(width-1,Math.floor(nx*width))])ctx.fillRect(sx,sy,2,2);
+            }
+        }
         const reference=p.review?.strength_reference??p.strength;
         const scale=reference?Number(widget(node,'strength').value)/reference:0;
         for(const [index,point] of (p.landmarks??[]).entries()) {
@@ -460,6 +517,7 @@ function editor(node) {
     canvas.onpointerdown=event=>{
         const p=plan(),where=eventPoint(event);
         if(!where||!validPlan(p))return;
+        if(areaMode==='paint'||areaMode==='erase'){stampArea(where,areaMode==='erase');drag={area:true};canvas.setPointerCapture(event.pointerId);return;}
         if(adding) {
             const moving=role.value!=='anchor';
             const path=returningPath(where,moving);
@@ -483,6 +541,7 @@ function editor(node) {
     canvas.onpointermove=event=>{
         if(!drag)return;
         const where=eventPoint(event);if(!where)return;
+        if(drag.area){stampArea(where,areaMode==='erase');return;}
         where.x=Math.max(0,Math.min(1,where.x));where.y=Math.max(0,Math.min(1,where.y));
         const p=plan(),point=p.landmarks[drag.index];
         if(drag.key>=0)Object.assign(point.path[drag.key],where);
@@ -524,6 +583,7 @@ function editor(node) {
     button(controls,'Prepare character points',()=>queue('prepare',node,status,undefined,'character'));
     button(controls,'Prepare background points',()=>queue('prepare',node,status,undefined,'background'));
     button(controls,'Prepare character + background points',()=>queue('prepare',node,status,undefined,'both'));
+    button(controls,'Update motion areas',()=>queue('areas',node,status));
     reviewButton=button(controls,'Accept point review',async()=>{
         try {
             const p=checkSettings(node);

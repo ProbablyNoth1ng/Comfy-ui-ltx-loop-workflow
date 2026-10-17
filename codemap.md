@@ -14,6 +14,7 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 | Strict render modes, point-linked source masks and protected-pixel compositing | `comfy_ltx_loop/motion.py`, `comfy_ltx_loop/candidates.py` | `tests/test_motion.py`, `tests/test_candidates.py` |
 | Optional point-group selection and direct Render | `comfy_ltx_loop/motion.py`, `staged_comfy.py`, editor web module | `tests/test_motion.py`, `tests/test_stages.py`, `tests/test_editor_semantics.mjs` |
 | Automatic character/background point proposals and model cleanup | `comfy_ltx_loop/vision.py` | `tests/test_vision.py` |
+| Strict-area geometry, SAM image prompt adapter and cleanup | `comfy_ltx_loop/areas.py` | `tests/test_areas.py`, `tests/test_motion.py` |
 | Prepare/Render/Upscale backend node interfaces | `comfy_ltx_loop/staged_comfy.py` | `tests/test_stages.py` |
 | Points UI, background controls, review and previews | `comfy_nodes/comfy_ltx_loop/web/comfy_ltx_loop.js` | `tests/test_editor_semantics.mjs`, `tests/test_previews.mjs`, `tests/editor_harness.py` |
 | Coordinate mapping and letterboxing | `comfy_nodes/comfy_ltx_loop/web/geometry.mjs` | `tests/test_editor_geometry.mjs` |
@@ -34,6 +35,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 - `docs/superpowers/specs/2026-10-17-strict-motion-areas-design.md` and
   `docs/superpowers/plans/2026-10-17-strict-motion-areas.md`: strict point areas,
   source-backed candidate persistence and protected PNG finishing.
+- `docs/superpowers/specs/2026-10-17-strict-point-review-repair-design.md` and
+  `docs/superpowers/plans/2026-10-17-strict-point-review-repair.md`: point-list,
+  strict-area authoring and review-flow repair.
 - `docs/superpowers/specs/2026-10-08-exact-16x9-render-design.md`: near-16:9
   crop contract, Pillow compatibility research and verification boundary.
 - `docs/superpowers/plans/2026-10-08-exact-16x9-render.md`: test-first
@@ -75,6 +79,7 @@ anime-loop-research/
 │   ├── examples.py                   CLI example generation
 │   ├── jobs.py                       CLI render/checkpoint/review/accept operations
 │   ├── motion.py                     Normalized plans, transforms, semantics and review
+│   ├── areas.py                      Strict area freshness, SAM prompt masks and cleanup
 │   ├── project.py                    CLI project validation, hashes and approval state
 │   ├── queue.py                      CLI ComfyUI submission receipts and status
 │   ├── regional.py                   Existing regional fallback preparation/finishing
@@ -114,6 +119,7 @@ anime-loop-research/
 │       │   ├── 2026-10-16-optional-points.md
 │       │   ├── 2026-10-17-qwen2b-points.md
 │       │   └── 2026-10-17-strict-motion-areas.md
+│       │   └── 2026-10-17-strict-point-review-repair.md
 │       └── specs/
 │           ├── 2026-10-08-comfy-ltx-loop-baseline-design.md
 │           ├── 2026-10-08-exact-16x9-render-design.md
@@ -123,6 +129,7 @@ anime-loop-research/
 │           ├── 2026-10-16-optional-points-design.md
 │           ├── 2026-10-17-qwen2b-points-design.md
 │           └── 2026-10-17-strict-motion-areas-design.md
+│           └── 2026-10-17-strict-point-review-repair-design.md
 ├── evidence/
 │   ├── comfy-local-validation.json   Historical local validation record
 │   ├── flf.json                      Reference workflow evidence
@@ -162,6 +169,7 @@ anime-loop-research/
 ├── tests/
 │   ├── editor_harness.py             Local HTTP editor fixture; simulated queues
 │   ├── test_candidates.py            Candidate persistence and finishing
+│   ├── test_areas.py                 SAM area and freshness contracts
 │   ├── test_cloud_install.py         Cloud install and launcher contracts
 │   ├── test_editor_geometry.mjs      Coordinate/letterboxing checks
 │   ├── test_editor_semantics.mjs     Semantic roles, groups and editor persistence

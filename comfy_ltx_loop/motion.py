@@ -4,6 +4,8 @@ import hashlib
 import json
 import math
 
+from .areas import complete_area
+
 
 def plan_fingerprint(plan):
     data = {'landmarks': plan['landmarks'],
@@ -201,9 +203,12 @@ def check_motion_areas(plan):
         raise ValueError('Update motion areas after assigning unique point ids')
     if not active:
         raise ValueError('Add or enable a moving point, or switch to Free motion')
-    areas = {area['point_id'] for area in plan.get('motion_areas', [])}
-    if not active <= areas or any(area_id not in active for area_id in areas):
-        raise ValueError('Update motion areas for every enabled moving point before review')
+    by_id = {area['point_id']:area for area in plan.get('motion_areas', [])}
+    missing = [point for point in plan['landmarks'] if point['id'] in active and
+               not complete_area(by_id.get(point['id']), point, plan['source_id'])]
+    if missing or any(area_id not in active for area_id in by_id):
+        labels = ', '.join(f"{index+1}. {point['label']}" for index, point in enumerate(plan['landmarks']) if point in missing)
+        raise ValueError('Update motion areas: '+labels)
     if not any(value for row in strict_mask(plan) for value in row):
         raise ValueError('Motion areas must contain an approved pixel before review')
 

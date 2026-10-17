@@ -17,6 +17,11 @@ test('Prepare excludes generation and finishing',()=>{
   assert.equal(result[2].inputs.stage,'prepare');
   assert.equal(graph[2].inputs.stage,'render');
 });
+test('Update motion areas keeps only Load Image and the motion editor',()=>{
+  const result=stageGraph(graph,2,'areas');
+  assert.deepEqual(Object.keys(result),['1','2']);
+  assert.equal(result[2].inputs.stage,'areas');
+});
 test('Render excludes finishing',()=>assert.deepEqual(Object.keys(stageGraph(graph,5,'render')),['1','2','3','4','5']));
 test('Upscale uses only disk selection',()=>assert.deepEqual(Object.keys(stageGraph(graph,7,'upscale')),['6','7']));
 test('new finishing node uses only saved candidate and rejects render ancestors',()=>{

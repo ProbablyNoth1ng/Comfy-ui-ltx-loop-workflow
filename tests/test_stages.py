@@ -9,6 +9,26 @@ from comfy_ltx_loop.staged_comfy import ComfyLTXLoopMotionEditor, ComfyLTXLoopSa
 
 
 class StageTests(unittest.TestCase):
+    def test_area_stage_preserves_points_and_uses_the_adapter_only(self):
+        import numpy as np
+        from comfy_ltx_loop.motion import new_plan
+        image = np.zeros((1,100,80,3),dtype=np.float32)
+        identity = __import__('hashlib').sha256(image[0].astype(np.uint8).tobytes()+str((80,100)).encode()).hexdigest()
+        plan = new_plan(identity,(80,100),'hair',['auto'],[dict(label='tip',x=.3,y=.4)])
+        before = json.dumps(plan['landmarks'],sort_keys=True)
+        def areas(source, incoming):
+            incoming['motion_areas']=[{'point_id':incoming['landmarks'][0]['id'],
+                'mask':[[255 if x == y == 1 else 0 for x in range(80)] for y in range(100)],
+                'freshness':{'source':incoming['source_id'], 'point':__import__('comfy_ltx_loop.areas',fromlist=['area_fingerprint']).area_fingerprint(incoming['landmarks'][0])}}]
+            return incoming
+        with patch('comfy_ltx_loop.staged_comfy.canvas_image',return_value=image), \
+             patch('comfy_ltx_loop.staged_comfy.propose_motion_areas',side_effect=areas) as proposed, \
+             patch('comfy_ltx_loop.staged_comfy.analyze') as analyze:
+            result = ComfyLTXLoopMotionEditor().execute(image,'hair','auto',6,24,.01,720,42,
+                'model','manual',json.dumps(plan),'areas')['result'][2]
+        proposed.assert_called_once();analyze.assert_not_called()
+        self.assertEqual(json.dumps(result['landmarks'],sort_keys=True),before)
+        self.assertEqual(result['review']['state'],'pending')
     def test_strict_render_rejects_direct_no_point_render_with_actionable_message(self):
         import numpy as np
         image = np.zeros((1,100,80,3),dtype=np.float32)

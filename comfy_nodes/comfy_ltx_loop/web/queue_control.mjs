@@ -24,6 +24,7 @@ export function resolveStageTargets(graph) {
     const upscalers=[...find('ComfyLTXLoopUpscale'),...find('ComfyLTXLoopFinish')];
     return {
         prepare: editors.length===1 ? {target:editors[0]} : {reason:editors.length?'Prepare points needs one motion editor.':'Prepare points needs an Comfy LTX Loop Motion Editor.'},
+        areas: editors.length===1 ? {target:editors[0]} : {reason:editors.length?'Update motion areas needs one motion editor.':'Update motion areas needs an Comfy LTX Loop Motion Editor.'},
         render: editors.length!==1 ? {reason:'Render needs exactly one motion editor; resolve the editor ambiguity.'} : savers.length===1 ? {target:savers[0]} : {reason:savers.length?'Render needs one candidate saver.':'Render needs an Comfy LTX Loop Save Candidate node.'},
         upscale: upscalers.length===1 ? {target:upscalers[0]} : {reason:upscalers.length?'Upscale needs one output node.':'Upscale needs an Comfy LTX Loop Upscale or Comfy LTX Loop Finish node.'}
     };

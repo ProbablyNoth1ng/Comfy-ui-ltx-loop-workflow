@@ -203,6 +203,16 @@ test('visible points filters markers, lists, and selection without changing grou
   assert.equal(f.plan().landmarks.at(-1).group,'background');
 });
 
+test('point lists materialize filtered entries and retain original numbering',async()=>{
+  const f=await fixture();
+  const labels=f.elements().filter(el=>el['aria-label']==='character points');
+  assert.equal(labels.length,1);
+  assert.ok(!f.elements().some(el=>el.textContent==='No character points. Use Add character point to place one.'));
+  assert.ok(f.elements().some(el=>el.textContent==='No background points. Use Add background point to place one.'));
+  const row=f.elements().find(el=>el['aria-label']==='Select landmark 24: eye');
+  assert.ok(row);
+});
+
 test('legacy background checkbox state migrates from Background motion and invalidates review',async()=>{
   const f=await fixture();
   const p=f.plan();p.review={state:'reviewed'};p.background={enabled:false,prompt:'',preparation:'manual'};
