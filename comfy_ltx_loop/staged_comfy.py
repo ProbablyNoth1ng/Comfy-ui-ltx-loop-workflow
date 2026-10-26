@@ -12,11 +12,17 @@ from .motion import new_plan, require_review, canvas_tracks, validate_plan, acti
 from .vision import analyze
 from .areas import propose_motion_areas
 from .candidates import save_candidate, load_handle, finish_candidate, list_candidates
+from .videos import list_videos, load_video, import_video
 
 
 def output_root():
     import folder_paths
     return Path(folder_paths.get_output_directory())/'comfy-ltx-loop'
+
+
+def input_root():
+    import folder_paths
+    return Path(folder_paths.get_input_directory())
 
 
 def image_array(image):
@@ -42,8 +48,10 @@ def canvas_image(image, transform):
 
 def preview_ui(record):
     directory = Path(record['directory']).relative_to(output_root()).as_posix()
-    return {'render_handle':[record], 'preview_paths':[
-        f'comfy-ltx-loop/{directory}/loop.mp4',f'comfy-ltx-loop/{directory}/seam.mp4']}
+    paths = [f'comfy-ltx-loop/{directory}/loop.mp4']
+    if record.get('source_kind') != 'imported_video':
+        paths.append(f'comfy-ltx-loop/{directory}/seam.mp4')
+    return {'render_handle':[record], 'preview_paths':paths}
 
 
 class ComfyLTXLoopMotionEditor:
@@ -266,14 +274,36 @@ class ComfyLTXLoopSavedCandidate:
     @classmethod
     def INPUT_TYPES(cls):
         records = list_candidates(output_root())
-        return {'required':{'candidate':(records or ['Select a saved candidate'],)}}
+        try:
+            videos = [meta['id'] for meta in list_videos(input_root())]
+        except ImportError:
+            videos = []  # Node schema remains inspectable outside ComfyUI.
+        return {'required':{'candidate':(records or ['Select a saved candidate'],)},
+                'optional':{'source_mode':(['saved_candidate','uploaded_video'],{'default':'saved_candidate'}),
+                            'uploaded_video':(videos or ['Select an uploaded video'],)}}
     RETURN_TYPES = ('RENDER_HANDLE',)
     FUNCTION = 'execute'
     CATEGORY = 'comfy-ltx-loop/staged'
     @classmethod
+    def VALIDATE_INPUTS(cls, candidate, source_mode='saved_candidate', uploaded_video='Select an uploaded video'):
+        try:
+            if source_mode == 'uploaded_video':
+                load_video(input_root(), uploaded_video)
+            elif source_mode == 'saved_candidate':
+                load_handle(output_root()/candidate, output_root())
+            else:
+                return 'Choose a saved render or uploaded video'
+            return True
+        except (ValueError, OSError) as error:
+            return str(error)
+    @classmethod
     def IS_CHANGED(cls,**kwargs):
         return float('nan')
-    def execute(self,candidate):
+    def execute(self,candidate,source_mode='saved_candidate',uploaded_video='Select an uploaded video'):
+        if source_mode == 'uploaded_video':
+            return (import_video(input_root(), uploaded_video, output_root()),)
+        if source_mode != 'saved_candidate':
+            raise ValueError('Choose a saved render or uploaded video')
         return (load_handle(output_root()/candidate,output_root()),)
 
 

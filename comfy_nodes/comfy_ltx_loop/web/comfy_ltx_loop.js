@@ -645,8 +645,10 @@ function previews(node,upscale=false) {
     const controls=element('div',root);
     if(upscale)button(controls,'Upscale',()=>queue('upscale',node,status));
     const row=element('div',root);row.style.display='flex';row.style.gap='8px';
+    const columns=[];
     const videos=['Continuous playback','Loop seam'].map(text=>{
         const column=element('div',row);column.style.width='48%';element('p',column,text);
+        columns.push(column);
         return element('video',column);
     });
     for(const video of videos){
@@ -657,9 +659,15 @@ function previews(node,upscale=false) {
     const download=element('a',root,'Save silent MP4');download.style.color='#7ce7dc';download.style.display='none';download.download='';
     function show(paths,record) {
         paths=paths.map(portablePath);
+        const imported=record.source_kind==='imported_video';
         const method={fast:'Fast',balanced_ai:'Balanced AI',original_ai:'Original AI'}[record.finish_method];
         status.textContent=`${method?method+' · ':''}${record.frame_count} frames · ${record.fps} FPS · ${record.dimensions.join(' × ')}. ${record.feedback?.join(' ')??''}`;
         videos.forEach((video,i)=>{
+            video.pause();
+            video.loop=!imported;
+            columns[i].style.display=paths[i]?'block':'none';
+            video.style.display=paths[i]?'block':'none';
+            if(!paths[i]){video.removeAttribute?.('src');return;}
             video.src=viewURL(paths[i]);video.load();
             video.play()?.catch(error=>{
                 if(error.name==='NotAllowedError')status.textContent='Automatic playback was blocked by the browser. Use the player controls to play.';
@@ -669,7 +677,7 @@ function previews(node,upscale=false) {
         // Save only preview metadata, not a render record containing past workflows.
         const summary={frame_count:record.frame_count,fps:record.fps,
                        dimensions:record.dimensions,feedback:record.feedback,
-                       finish_method:record.finish_method};
+                       finish_method:record.finish_method,source_kind:record.source_kind};
         node.properties.comfy_ltx_loop_preview={paths,record:summary};
     }
     const executed=node.onExecuted;
@@ -692,25 +700,41 @@ function previews(node,upscale=false) {
 }
 
 function selector(node) {
-    const root=panel(node,110),status=element('p',root,'The last render is selected for upscale. Choose another saved candidate to preview it.');
+    const mode=widget(node,'source_mode'),uploaded=widget(node,'uploaded_video');
+    const root=panel(node,mode?240:110),status=element('p',root,'The last render is selected for upscale. Choose another saved candidate to preview it.');
     const choice=widget(node,'candidate');
-    let revision=0,removed=false;
+    hide(node,'source_mode');hide(node,'uploaded_video');
+    let revision=0,removed=false,inventory=[],videoListRevision=0,candidateRevision=0;
+    const ownVideo=()=>mode?.value==='uploaded_video';
+    function videoDetails(){
+        const meta=inventory.find(item=>item.id===uploaded?.value);
+        status.textContent=meta?`${meta.filename} · ${meta.dimensions.join(' × ')} · ${meta.duration.toFixed(3)} s · Output ${meta.fps} FPS. ${meta.normalization_warning}`
+            :'Choose or upload a video for Upscale. The whole clip is processed without sound.';
+    }
+    let modeControl,videoControl;
+    function syncControls(){
+        if(modeControl)modeControl.value=mode.value;
+        if(videoControl)videoControl.value=uploaded.value;
+        app.graph.setDirtyCanvas(true,true);
+    }
     function select(candidate) {
-        revision++;
+        candidateRevision++;
+        if(!ownVideo())revision++;
         candidate=portablePath(candidate);
         choice.options.values=[candidate,...(choice.options.values??[])
             .filter(value=>value!==candidate&&value!=='Select a saved candidate')];
         choice.value=candidate;
-        status.textContent=`Selected ${candidate.split('/')[0]} for upscale.`;
+        if(!ownVideo())status.textContent=`Selected ${candidate.split('/')[0]} for upscale.`;
         app.graph.setDirtyCanvas(true,true);
     }
     async function previewSelected() {
         const current=++revision,candidate=portablePath(choice.value);
+        if(ownVideo()){videoDetails();return;}
         if(candidate==='Select a saved candidate')return;
         try {
             const response=await api.fetchApi('/comfy-ltx-loop/record?'+new URLSearchParams({candidate}));
             if(!response.ok)throw new Error(await response.text());const record=await response.json();
-            if(removed||current!==revision)return;
+            if(removed||current!==revision||ownVideo())return;
             const directory=candidate.substring(0,candidate.lastIndexOf('/'));
             const target=find('ComfyLTXLoopSaveCandidate');
             target?.comfy_ltx_loopShowPreview([`comfy-ltx-loop/${directory}/loop.mp4`,`comfy-ltx-loop/${directory}/seam.mp4`],record);
@@ -718,29 +742,84 @@ function selector(node) {
         }catch(error){if(!removed&&current===revision)status.textContent=error.message;}
     }
     async function refresh() {
-        const current=++revision;
+        const current=++revision,candidateCurrent=++candidateRevision;
         try {
             const response=await api.fetchApi('/comfy-ltx-loop/candidates');
             if(!response.ok)throw new Error(await response.text());
             const records=(await response.json()).map(portablePath);
-            if(removed||current!==revision)return;
+            if(removed||current!==revision||candidateCurrent!==candidateRevision)return;
             choice.options.values=records.length?records:['Select a saved candidate'];
             choice.value=portablePath(choice.value);
             if(!records.includes(choice.value))choice.value=records[0]??'Select a saved candidate';
             app.graph.setDirtyCanvas(true,true);
-            status.textContent=records.length?`${records.length} saved candidates available.`:'No completed renders yet. Render a candidate first.';
+            if(ownVideo())videoDetails();
+            else status.textContent=records.length?`${records.length} saved candidates available.`:'No completed renders yet. Render a candidate first.';
             await previewSelected();
-        }catch(error){if(!removed&&current===revision)status.textContent=error.message;}
+        }catch(error){if(!removed&&current===revision&&candidateCurrent===candidateRevision)status.textContent=error.message;}
     }
     button(root,'Refresh candidates',refresh);
     const changed=choice.callback;
     choice.callback=function(){changed?.apply(this,arguments);return previewSelected();};
+    async function refreshVideos(){
+        const current=++videoListRevision,selection=revision;
+        try{
+            const response=await api.fetchApi('/comfy-ltx-loop/videos');
+            if(!response.ok)throw new Error(await response.text());
+            const records=await response.json();
+            if(removed||current!==videoListRevision||selection!==revision)return;
+            inventory=records;
+            uploaded.options.values=records.length?records.map(item=>item.id):['Select an uploaded video'];
+            // Preserve saved IDs, even if their file was removed on the server.
+            // Execution then reports a missing upload rather than choosing another.
+            videoControl.replaceChildren();
+            element('option',videoControl,'Choose an uploaded video').value='Select an uploaded video';
+            for(const item of records)element('option',videoControl,`${item.filename} (${item.id.slice(0,8)})`).value=item.id;
+            syncControls();if(ownVideo())videoDetails();
+        }catch(error){if(!removed&&current===videoListRevision&&selection===revision)status.textContent=error.message;}
+    }
+    if(mode&&uploaded){
+        const sourceLabel=element('label',root,'Upscale source ');
+        modeControl=element('select',sourceLabel);modeControl.setAttribute('aria-label','Upscale source');
+        element('option',modeControl,'Saved render').value='saved_candidate';
+        element('option',modeControl,'Uploaded video').value='uploaded_video';
+        const fileLabel=element('label',root,'Uploaded videos ');
+        videoControl=element('select',fileLabel);videoControl.setAttribute('aria-label','Uploaded videos');
+        const file=element('input',root);file.type='file';file.multiple=false;
+        file.accept='.mp4,.mov,.mkv,.webm,.avi';file.style.display='none';
+        button(root,'Upload video',()=>file.click());
+        button(root,'Refresh videos',refreshVideos);
+        const modeChanged=mode.callback,videoChanged=uploaded.callback;
+        mode.callback=function(){modeChanged?.apply(this,arguments);syncControls();return previewSelected();};
+        uploaded.callback=function(){videoChanged?.apply(this,arguments);syncControls();return previewSelected();};
+        modeControl.onchange=()=>{mode.value=modeControl.value;return mode.callback(mode.value);};
+        videoControl.onchange=()=>{uploaded.value=videoControl.value;return uploaded.callback(uploaded.value);};
+        file.onchange=async()=>{
+            if(!file.files?.length)return;
+            const current=++revision;
+            file.disabled=true;status.textContent='Uploading and checking video…';
+            try{
+                const body=new FormData();body.append('video',file.files[0]);
+                const response=await api.fetchApi('/comfy-ltx-loop/videos',{method:'POST',body});
+                const meta=await response.json();
+                if(!response.ok)throw new Error(meta.error??'Video upload failed');
+                if(removed||current!==revision)return;
+                videoListRevision++; // Invalidate lists started before this upload.
+                inventory=[meta,...inventory.filter(item=>item.id!==meta.id)];
+                uploaded.options.values=inventory.map(item=>item.id);
+                element('option',videoControl,`${meta.filename} (${meta.id.slice(0,8)})`).value=meta.id;
+                uploaded.value=meta.id;mode.value='uploaded_video';syncControls();videoDetails();
+            }catch(error){if(!removed&&current===revision)status.textContent=error.message;}
+            finally{file.disabled=false;file.value='';}
+        };
+        syncControls();
+    }
     node.comfy_ltx_loopSelectCandidate=select;
     const configured=node.onConfigure;
-    node.onConfigure=function(){configured?.apply(this,arguments);void refresh();};
+    node.onConfigure=function(){configured?.apply(this,arguments);revision++;syncControls();
+        void refresh().then(()=>{if(mode&&uploaded)void refreshVideos();});};
     const onRemoved=node.onRemoved;
-    node.onRemoved=function(){removed=true;revision++;onRemoved?.apply(this,arguments);};
-    void refresh();
+    node.onRemoved=function(){removed=true;revision++;videoListRevision++;onRemoved?.apply(this,arguments);};
+    void refresh().then(()=>{if(mode&&uploaded)void refreshVideos();});
 }
 
 app.registerExtension({name:'comfy-ltx-loop.staged',

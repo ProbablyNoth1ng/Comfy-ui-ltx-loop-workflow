@@ -8,6 +8,8 @@ for the required workflow.
 
 | Document | Purpose |
 | --- | --- |
+| [Uploaded video Upscale design](specs/2026-10-26-upload-video-upscale-design.md) | Personal video storage, timing normalization and compatible source selection |
+| [Uploaded video Upscale plan](plans/2026-10-26-upload-video-upscale.md) | Implementation and verification ledger |
 | [Comfy LTX Loop baseline](specs/2026-10-08-comfy-ltx-loop-baseline-design.md) | Current architecture, contracts, dependencies and test ownership |
 | [Project workflow design](specs/2026-10-08-project-workflow-design.md) | Product/technical specs, Context7, test-first work and codemap maintenance |
 | [Exact 16:9 render design](specs/2026-10-08-exact-16x9-render-design.md) | Export and finishing crop rule for near-16:9 sources |
