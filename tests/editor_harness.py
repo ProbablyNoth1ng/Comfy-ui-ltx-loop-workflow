@@ -9,6 +9,8 @@ import json
 import subprocess
 import sys
 import tempfile
+from email.parser import BytesParser
+from email.policy import default
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -56,6 +58,9 @@ RECORD = {'schema':'comfy-ltx-loop-render-handle/1','kind':'candidate','state':'
           'frame_count':72,'fps':24,'dimensions':[128,72],'feedback':['Local playback fixture.']}
 CANDIDATES = ['candidate-fixture-new/record.json','candidate-fixture-old/record.json']
 VIDEO = b''
+VIDEOS = [{'id':'a'*32,'filename':'fixture-video.mp4','dimensions':[128,72],
+           'duration':3.,'fps':'24',
+           'normalization_warning':'Fixture only. Output normalized to 24 FPS.'}]
 
 HTML = '''<!doctype html><meta charset="utf-8"><title>Comfy LTX Loop editor test fixture</title>
 <style>body{background:#0d1117;color:white;font:14px system-ui;margin:20px}.panels{display:flex;gap:16px;align-items:start;overflow-x:auto}.panel{flex:0 0 520px}pre{white-space:pre-wrap}input{margin:3px}</style>
@@ -80,7 +85,7 @@ const editor=make(2,'ComfyLTXLoopMotionEditor',{motion_prompt:'Gentle hair sway.
  animate_background:false,background_prompt:'',background_preparation:'model',prepare_target:'character',
  use_character_points:true,use_background_points:true},document.querySelector('#editor'));
 const saver=make(5,'ComfyLTXLoopSaveCandidate',{},document.querySelector('#outputs'));
-const selector=make(6,'ComfyLTXLoopSavedCandidate',{candidate:'Select a saved candidate'},document.querySelector('#outputs'));
+const selector=make(6,'ComfyLTXLoopSavedCandidate',{candidate:'Select a saved candidate',source_mode:'saved_candidate',uploaded_video:'Select an uploaded video'},document.querySelector('#outputs'));
 const upscale=make(7,'ComfyLTXLoopUpscale',{resolution:'1440p',chunk_size:4},document.querySelector('#outputs'));
 const load=make(1,'LoadImage',{image:'fixture.png'},document.querySelector('#editor'));
 app.graph._nodes=[load,editor,saver,selector,upscale];
@@ -95,7 +100,7 @@ document.getElementById('render-fixture').onclick=async()=>saver.onExecuted({
 for(const [id,path] of [['qwen-fixture','/fixture-qwen-plan'],['failed-fixture','/fixture-failed-plan'],['dense-fixture','/fixture-dense-plan'],['background-fixture','/fixture-background-plan']])
  document.getElementById(id).onclick=async()=>editor.onExecuted({motion_plan:[await(await fetch(path)).json()],
  bg_image:[await(await fetch('/fixture-image')).text()]});
-document.getElementById('reopen-fixture').onclick=()=>{editor.widgets.find(w=>w.name==='plan_json').value='{}';editor.onConfigure();};
+document.getElementById('reopen-fixture').onclick=()=>{editor.widgets.find(w=>w.name==='plan_json').value='{}';editor.onConfigure();selector.onConfigure();upscale.onConfigure();};
 document.getElementById('invalid-fixture').onclick=()=>editor.onExecuted({motion_plan:[{schema:'invalid'}]});
 document.getElementById('run-fixture').onclick=()=>app.queuePrompt(0,1);
 document.getElementById('run-again-fixture').onclick=()=>app.queuePrompt(0,1);
@@ -111,7 +116,7 @@ APP = '''export const app={graph:{_nodes:[],setDirtyCanvas(){}},registerExtensio
  2:{class_type:'ComfyLTXLoopMotionEditor',inputs},3:{class_type:'UNETLoader',inputs:{}},
  4:{class_type:'Sampler',inputs:{model:['3',0],canvas:['2',0]}},
  5:{class_type:'ComfyLTXLoopSaveCandidate',inputs:{video:['4',0],motion_plan:['2',2]}},
- 6:{class_type:'ComfyLTXLoopSavedCandidate',inputs:{candidate:this.graph._nodes.find(n=>n.id===6).widgets.find(w=>w.name==='candidate').value}},
+ 6:{class_type:'ComfyLTXLoopSavedCandidate',inputs:Object.fromEntries(this.graph._nodes.find(n=>n.id===6).widgets.map(w=>[w.name,w.value]))},
  7:{class_type:'ComfyLTXLoopUpscale',inputs:{candidate:['6',0]}}}};}};'''
 
 API = '''export const api={apiURL:path=>path,fetchApi:(path,options)=>fetch(path,options),
@@ -146,6 +151,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(VIDEO,'video/mp4')
             else:self.reply('Preview file not found','text/plain',404)
         elif path=='/comfy-ltx-loop/candidates':self.reply(CANDIDATES)
+        elif path=='/comfy-ltx-loop/videos':self.reply(VIDEOS)
         elif path=='/comfy-ltx-loop/record':
             candidate=query.get('candidate',[''])[0]
             if candidate in CANDIDATES:
@@ -157,6 +163,20 @@ class Handler(BaseHTTPRequestHandler):
             self.reply((ROOT/'comfy_nodes/comfy_ltx_loop/web'/name).read_bytes(),'text/javascript')
         else:self.reply({},status=404)
     def do_POST(self):
+        if self.path=='/comfy-ltx-loop/videos':
+            # Simulate the upload UI boundary. Actual streaming/validation is
+            # covered by test_video_routes against the real aiohttp endpoints.
+            payload=self.rfile.read(int(self.headers['Content-Length']))
+            message=BytesParser(policy=default).parsebytes(
+                ('Content-Type: '+self.headers['Content-Type']+'\r\n\r\n').encode()+payload)
+            parts=list(message.iter_parts())
+            if len(parts)!=1 or not parts[0].get_filename():
+                self.reply({'error':'Upload one video'},status=400);return
+            import uuid
+            meta={'id':uuid.uuid4().hex,'filename':parts[0].get_filename(),
+                  'dimensions':[128,72],'duration':3.,'fps':'24',
+                  'normalization_warning':'Fixture only. Output normalized to 24 FPS.'}
+            VIDEOS.insert(0,meta);self.reply(meta);return
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if self.path=='/comfy-ltx-loop/review':
             try:self.reply(review_plan(data))
@@ -170,7 +190,13 @@ class Handler(BaseHTTPRequestHandler):
             elif any(n['class_type']=='ComfyLTXLoopSaveCandidate' for n in data['output'].values()):
                 self.reply({'node':5,'ui':{'preview_paths':['comfy-ltx-loop/candidate-fixture-new/loop.mp4','comfy-ltx-loop/candidate-fixture-new/seam.mp4'],'render_handle':[RECORD]}})
             elif any(n['class_type']=='ComfyLTXLoopUpscale' for n in data['output'].values()):
-                self.reply({'node':7,'ui':{'preview_paths':['comfy-ltx-loop/finish-fixture/loop.mp4','comfy-ltx-loop/finish-fixture/seam.mp4'],'render_handle':[dict(RECORD,kind='finish')]}})
+                selected=next(n['inputs'] for n in data['output'].values() if n['class_type']=='ComfyLTXLoopSavedCandidate')
+                imported=selected.get('source_mode')=='uploaded_video'
+                paths=['comfy-ltx-loop/finish-fixture/loop.mp4']
+                if not imported:paths.append('comfy-ltx-loop/finish-fixture/seam.mp4')
+                final=dict(RECORD,kind='finish')
+                if imported:final['source_kind']='imported_video'
+                self.reply({'node':7,'ui':{'preview_paths':paths,'render_handle':[final]}})
             else:self.reply({})
         else:self.reply({},status=404)
 

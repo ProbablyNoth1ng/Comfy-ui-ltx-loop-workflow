@@ -1,6 +1,6 @@
 # Comfy LTX Loop code map
 
-Updated: 2026-10-17. Read this before locating code. Update it in the same change
+Updated: 2026-10-26. Read this before locating code. Update it in the same change
 whenever files/directories are added, deleted, renamed or moved, or module ownership
 changes. Confirm details against source; this is navigation, not a substitute for code.
 
@@ -20,7 +20,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 | Coordinate mapping and letterboxing | `comfy_nodes/comfy_ltx_loop/web/geometry.mjs` | `tests/test_editor_geometry.mjs` |
 | Stage pruning and global Run chooser/queue guards | `comfy_nodes/comfy_ltx_loop/web/stages.mjs`, `queue_control.mjs` in the same directory | `tests/test_stages.mjs`, `tests/test_queue_control.mjs` |
 | Saved candidates, MP4 encoding, Fast/AI finishing and resolution | `comfy_ltx_loop/candidates.py` | `tests/test_candidates.py`, `tests/test_resolution_integration.py` |
-| Review/candidate HTTP endpoints | `comfy_ltx_loop/comfy_routes.py` | Backend stage tests and editor fixture |
+| Uploaded video storage, validation, normalization and cached imports | `comfy_ltx_loop/videos.py` | `tests/test_videos.py`, `tests/test_video_routes.py` |
+| Interruptible FFmpeg/FFprobe commands | `comfy_ltx_loop/media.py` | Real-media tests in `tests/test_videos.py` |
+| Review/candidate/video HTTP endpoints | `comfy_ltx_loop/comfy_routes.py` | Backend stage/HTTP tests and editor fixture |
 | Official and adapted LTX graph | `workflows/`, `tools/build_comfy_ltx_loop_workflow.mjs` | `tests/test_motion_workflow.mjs`, `docs/qualification.md` |
 | Cloud install, ComfyUI compatibility and model snapshots | `cloud/install.py` | `tests/test_cloud_install.py`, `tests/test_vision_install.py` |
 | RunPod launch adapter and start-command generation | `cloud/runpod_entrypoint.py`, `tools/build_runpod_command.py` | `tests/fixtures/`, `docs/runpod-autoinstall.md` |
@@ -29,6 +31,9 @@ changes. Confirm details against source; this is navigation, not a substitute fo
 
 ## Current change documents
 
+- `docs/superpowers/specs/2026-10-26-upload-video-upscale-design.md` and
+  `docs/superpowers/plans/2026-10-26-upload-video-upscale.md`: personal videos in
+  the existing source selector, streaming upload and rational FPS disk imports.
 - `docs/superpowers/specs/2026-10-17-qwen2b-points-design.md` and
   `docs/superpowers/plans/2026-10-17-qwen2b-points.md`: selectable 2B proposals,
   additive pinned cloud snapshot and verification.
@@ -72,9 +77,11 @@ anime-loop-research/
 │   ├── assets.py                     Checked model-weight caching
 │   ├── benchmark.py                  CLI rendering/transfer benchmark
 │   ├── candidates.py                 Persistent records, previews and Fast/AI finishing
+│   ├── videos.py                     Uploaded originals, validation and disk import cache
+│   ├── media.py                      Interruptible media subprocesses and disk diagnostics
 │   ├── cli.py                        Existing CLI commands
 │   ├── comfy.py                      Legacy node/export integration and node registry
-│   ├── comfy_routes.py               Same-origin review and candidate endpoints
+│   ├── comfy_routes.py               Same-origin review, candidate and video endpoints
 │   ├── environment.py                Environment revision/lock operations
 │   ├── examples.py                   CLI example generation
 │   ├── jobs.py                       CLI render/checkpoint/review/accept operations
@@ -120,6 +127,7 @@ anime-loop-research/
 │       │   ├── 2026-10-17-qwen2b-points.md
 │       │   └── 2026-10-17-strict-motion-areas.md
 │       │   └── 2026-10-17-strict-point-review-repair.md
+│       │   └── 2026-10-26-upload-video-upscale.md
 │       └── specs/
 │           ├── 2026-10-08-comfy-ltx-loop-baseline-design.md
 │           ├── 2026-10-08-exact-16x9-render-design.md
@@ -130,6 +138,7 @@ anime-loop-research/
 │           ├── 2026-10-17-qwen2b-points-design.md
 │           └── 2026-10-17-strict-motion-areas-design.md
 │           └── 2026-10-17-strict-point-review-repair-design.md
+│           └── 2026-10-26-upload-video-upscale-design.md
 ├── evidence/
 │   ├── comfy-local-validation.json   Historical local validation record
 │   ├── flf.json                      Reference workflow evidence
@@ -169,6 +178,8 @@ anime-loop-research/
 ├── tests/
 │   ├── editor_harness.py             Local HTTP editor fixture; simulated queues
 │   ├── test_candidates.py            Candidate persistence and finishing
+│   ├── test_videos.py                Real-media upload/import/finish timing and orientation
+│   ├── test_video_routes.py          Streaming multipart validation, limits and cleanup
 │   ├── test_areas.py                 SAM area and freshness contracts
 │   ├── test_cloud_install.py         Cloud install and launcher contracts
 │   ├── test_editor_geometry.mjs      Coordinate/letterboxing checks
@@ -205,10 +216,14 @@ anime-loop-research/
 - `outputs/`: ignored local frames, videos, reviews and generated RunPod commands.
 - `benchmarks/`, `environment.lock.json`: ignored benchmark/environment records.
 - `.venv/`, `__pycache__/`, `*.egg-info/`: ignored Python environment/cache/build data.
+- `.test-deps/`: ignored local ComfyUI-runtime dependencies for HTTP test execution.
 - `.git/`: repository metadata; do not inventory internal files.
 - An installed ComfyUI checkout, models and `ComfyUI/output/comfy-ltx-loop/` live on
   the deployment host, outside this source tree. Candidate directories contain
   records, raw/exported frames and preview videos.
+  Uploaded originals/metadata live separately under
+  `ComfyUI/input/comfy-ltx-loop-videos/`. Completed normalized PNG imports and
+  separate finishes live under the existing output root; staging data is temporary.
 - Context7's server/credential/rule live in user-level `~/.codex/config.toml` and
   `~/.codex/AGENTS.md`; its installed skill is under `~/.agents/skills/context7-mcp/`.
   These are external configuration, not project files. Never copy credentials here.
@@ -216,7 +231,7 @@ anime-loop-research/
 Inventory the maintained tree with:
 
 ```powershell
-rg --files --hidden -g '!.git/**' -g '!outputs/**' -g '!benchmarks/**' -g '!.venv/**' -g '!**/__pycache__/**' -g '!**/*.egg-info/**' -g '!environment.lock.json'
+rg --files --hidden -g '!.git/**' -g '!outputs/**' -g '!benchmarks/**' -g '!.venv/**' -g '!.test-deps/**' -g '!**/__pycache__/**' -g '!**/*.egg-info/**' -g '!environment.lock.json'
 ```
 
 When adding a design/plan, update the tree and `docs/superpowers/README.md` index.

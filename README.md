@@ -71,6 +71,27 @@ see [automatic installation](docs/runpod-autoinstall.md).
    the seam, then click
    **Save silent MP4**. Lossless frames remain beside the output.
 
+To upscale your own video, use the same **Select saved candidate** node: choose
+**Uploaded video** under **Upscale source**, click **Upload video**, and choose
+one MP4, MOV, MKV, WebM or AVI from your computer. Previously uploaded videos are
+listed by filename; **Refresh videos** reloads them. The source details show
+displayed dimensions, duration and exact output FPS. Choose Fast, Balanced AI or
+Original AI and 1080p, 1440p or 4K, then click **Upscale** (or Run → Upscale).
+Prepare and Render are not needed. The whole clip is processed, including videos
+longer than six seconds, with normal playback rather than a loop or seam preview.
+Download the separate **silent MP4**; PNG frames remain beside it.
+
+Uploads retain their original bytes under `ComfyUI/input/comfy-ltx-loop-videos/`;
+imports and results live under `ComfyUI/output/comfy-ltx-loop/`. ComfyUI's configured
+upload limit applies. Invalid or undecodable videos are rejected. Orientation and
+aspect ratio are preserved, including rotation metadata; the near-16:9 crop used
+for generated renders does not apply. VFR is normalized to the positive average
+frame rate (falling back to the nominal rate): frames may repeat/drop, with
+duration preserved within one output frame. Fractional FPS stays fractional.
+The selected mode/video is saved in the workflow. A later Render updates the saved
+render choice without switching away from your video. Choose **Saved render** to
+return to generated candidates; older workflows start in that mode.
+
 Use **Run** to choose exactly one animation stage: **Prepare character points**,
 **Prepare background points**, **Prepare character + background points**, **Render**, or **Upscale**. The chooser submits one stage and does not apply
 Run's batch count. The node stage buttons remain available. Preparing points

@@ -11,6 +11,7 @@ from PIL import Image
 
 from .motion import validate_plan, plan_fingerprint, active_point, strict_mask
 from .project import atomic_json, sha
+from .media import check_interrupted, run_media
 
 
 def list_candidates(root):
@@ -67,18 +68,17 @@ def allocate(root, prefix):
 
 def encode(out, count, fps, name='loop.mp4'):
     temporary = out/(name+'.tmp.mp4')
-    subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-framerate',str(fps),
+    run_media(['ffmpeg','-hide_banner','-loglevel','error','-y','-framerate',str(fps),
                     '-i',str(out/'frames/%06d.png'),'-frames:v',str(count),'-an',
                     '-c:v','libx264','-crf','18','-pix_fmt','yuv420p','-movflags',
-                    '+faststart',str(temporary)],check=True)
-    info = json.loads(subprocess.run(['ffprobe','-v','error','-count_frames',
-                     '-show_streams','-of','json',str(temporary)],check=True,
-                     capture_output=True,text=True).stdout)['streams']
+                    '+faststart',str(temporary)])
+    info = json.loads(run_media(['ffprobe','-v','error','-count_frames',
+                     '-show_streams','-of','json',str(temporary)]).stdout)['streams']
     with Image.open(out/'frames/000000.png') as image:
         size = image.size
     if (len(info) != 1 or info[0]['codec_type'] != 'video' or
         int(info[0]['nb_read_frames']) != count or
-        Fraction(info[0]['r_frame_rate']) != fps or
+        Fraction(info[0]['avg_frame_rate']) != Fraction(str(fps)) or
         (info[0]['width'], info[0]['height']) != size):
         raise ValueError('Video frame count, FPS, dimensions or silence validation failed')
     temporary.replace(out/name)
@@ -88,7 +88,7 @@ def encode_previews(out, count, fps):
     encode(out,count,fps)
     seam = out/'seam-encode'
     (seam/'frames').mkdir(parents=True)
-    edge = min(fps//2,count//2)
+    edge = max(1,min(int(Fraction(str(fps))//2),count//2))
     indices = list(range(count-edge,count))+list(range(edge))
     for index, source in enumerate(indices):
         shutil.copyfile(out/'frames'/f'{source:06d}.png', seam/'frames'/f'{index:06d}.png')
@@ -98,9 +98,14 @@ def encode_previews(out, count, fps):
 
 
 def save_record(out, record):
+    hashes = {}
+    for path in sorted((out/'frames').glob('*.png')):
+        check_interrupted()
+        hashes[path.name] = sha(path)
     record.update(schema='comfy-ltx-loop-render-handle/1', directory=str(out.resolve()),
                   record=str((out/'record.json').resolve()),
-                  frame_hashes={p.name:sha(p) for p in sorted((out/'frames').glob('*.png'))})
+                  frame_hashes=hashes)
+    check_interrupted()
     atomic_json(out/'record.json',record)
     return record
 
@@ -226,23 +231,26 @@ def finish_candidate(handle, root, resolution, chunk_size=4, enhancer=None, meth
     if method not in ('fast','balanced_ai','original_ai'):
         raise ValueError('Choose a valid finish method')
     handle = load_handle(Path(handle['record']),root)
-    if handle['kind'] != 'candidate':
-        raise ValueError('Select an original animation candidate to upscale')
-    target = exact_widescreen_size(output_size(handle['dimensions'],resolutions[resolution]))
+    if handle['kind'] not in ('candidate','imported_video'):
+        raise ValueError('Select an original animation candidate or uploaded video to upscale')
+    imported = handle['kind'] == 'imported_video'
+    target = output_size(handle['dimensions'],resolutions[resolution])
+    if not imported:
+        target = exact_widescreen_size(target)
     out = allocate(root,f"finish-{Path(handle['directory']).name}-{resolution}")
     if method == 'fast':
         source = Path(handle['directory'])/'frames'
-        crop_w,crop_h = exact_widescreen_size(handle['dimensions'])
+        crop_w,crop_h = handle['dimensions'] if imported else exact_widescreen_size(handle['dimensions'])
         width,height = handle['dimensions']
         crop = (f'crop={crop_w}:{crop_h}:{(width-crop_w)//2}:{(height-crop_h)//2},'
                 if (crop_w,crop_h) != (width,height) else '')
-        subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y',
+        run_media(['ffmpeg','-hide_banner','-loglevel','error','-y',
                         '-framerate',str(handle['fps']),'-start_number','0',
                         '-i',str(source/'%06d.png'),'-vf',
                         f'{crop}scale={target[0]}:{target[1]}:flags=lanczos',
                         '-frames:v',str(handle['frame_count']),'-fps_mode','passthrough',
                         '-start_number','0','-pix_fmt','rgb24',
-                        str(out/'frames/%06d.png')],check=True)
+                        str(out/'frames/%06d.png')])
         for index in range(handle['frame_count']):
             frame = out/'frames'/f'{index:06d}.png'
             if not frame.is_file():
@@ -259,7 +267,11 @@ def finish_candidate(handle, root, resolution, chunk_size=4, enhancer=None, meth
                 # cancellation/progress and never materialize the complete tensor batch.
                 for index in range(start,min(start+chunk_size,handle['frame_count'])):
                     with Image.open(Path(handle['directory'])/'frames'/f'{index:06d}.png') as image:
-                        result = enhancer(crop_exact_widescreen(image.convert('RGB')),target)
+                        prepared = image.convert('RGB')
+                        if not imported:
+                            prepared = crop_exact_widescreen(prepared)
+                        check_interrupted()
+                        result = enhancer(prepared,target)
                         if result.size != target:
                             raise ValueError('Upscaler returned unexpected dimensions')
                         result.save(out/'frames'/f'{index:06d}.png')
@@ -274,15 +286,22 @@ def finish_candidate(handle, root, resolution, chunk_size=4, enhancer=None, meth
                 close()
     if handle.get('motion_plan', {}).get('render_mode') == 'only_pointed_parts':
         protect_finished_frames(out, handle, target)
-    record = save_record(out, {'kind':'finish','parent':handle['record'],
+    record = {'kind':'finish','parent':handle['record'],
         'dimensions':list(target),'fps':handle['fps'],'frame_count':handle['frame_count'],
-        'seed':handle['seed'],'generation_settings':handle['generation_settings'],
         'finish_method':method,
         'upscale_model':None if method == 'fast' else 'realesr-animevideov3',
         'upscale_model_sha256':getattr(enhancer,'model_sha256',None) if method != 'fast' else None,
         'state':'encoding',
-        'visual_review_required':True,'feedback':['Inspect upscale flicker before downloading.']})
-    encode_previews(out,record['frame_count'],record['fps'])
+        'visual_review_required':True,'feedback':['Inspect upscale flicker before downloading.']}
+    if imported:
+        record.update(source_kind='imported_video', source=handle['source'],
+                      normalization=handle['normalization'], duration=handle['duration'])
+        record['feedback'].extend(handle.get('feedback', []))
+        encode(out,record['frame_count'],record['fps'])
+    else:
+        record.update(seed=handle['seed'],generation_settings=handle['generation_settings'])
+        encode_previews(out,record['frame_count'],record['fps'])
+    check_interrupted()
     record['state'] = 'awaiting_visual_review'
     return save_record(out,record)
 
